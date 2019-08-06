@@ -1,0 +1,20 @@
+{
+    "batch_size": 64,
+    "ckpt": "model_loss_best.pt",
+    "clean": false,
+    "debug": false,
+    "epoch_size": null,
+    "fold": 0,
+    "limit": null,
+    "lr": 3e-05,
+    "mode": "train",
+    "model": "se_resnext50",
+    "n_epochs": 60,
+    "patience": 4,
+    "pretrained": "imagenet",
+    "run_root": "result/se50_talking_0.8",
+    "step": 8,
+    "tta": 1,
+    "use_sample": false,
+    "workers": 8
+}
