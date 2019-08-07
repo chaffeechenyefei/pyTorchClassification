@@ -18,11 +18,62 @@ __all__ = ['SENet', 'senet154', 'se_resnet50', 'se_resnet101', 'se_resnet152',
            'se_resnext50_32x4d', 'se_resnext101_32x4d']
 from collections import OrderedDict
 
+#===================================================================================================
+#===================================================================================================
+#basic models
+#===================================================================================================
+#===================================================================================================
 class AvgPool(nn.Module):
     def forward(self, x):
         return F.avg_pool2d(x, x.shape[2:])
 
+# #import from others github
+# class BasicConv2d(nn.Module):
 
+#     def __init__(self, in_planes, out_planes, kernel_size, stride, padding=0):
+#         super(BasicConv2d, self).__init__()
+#         self.conv = nn.Conv2d(in_planes, out_planes,
+#                               kernel_size=kernel_size, stride=stride,
+#                               padding=padding, bias=False) # verify bias false
+#         self.bn = nn.BatchNorm2d(out_planes,
+#                                  eps=0.001, # value found in tensorflow
+#                                  momentum=0.1, # default pytorch value
+#                                  affine=True)
+#         self.relu = nn.ReLU(inplace=True)
+
+#     def forward(self, x):
+#         x = self.conv(x)
+#         x = self.bn(x)
+#         x = self.relu(x)
+#         return x
+
+# #Example of mix two branch into one output
+# class Mixed_4a(nn.Module):
+
+#     def __init__(self):
+#         super(Mixed_4a, self).__init__()
+
+#         self.branch0 = nn.Sequential(
+#             BasicConv2d(160, 64, kernel_size=1, stride=1),
+#             BasicConv2d(64, 96, kernel_size=3, stride=1)
+#         )
+
+#         self.branch1 = nn.Sequential(
+#             BasicConv2d(160, 64, kernel_size=1, stride=1),
+#             BasicConv2d(64, 64, kernel_size=(1,7), stride=1, padding=(0,3)),
+#             BasicConv2d(64, 64, kernel_size=(7,1), stride=1, padding=(3,0)),
+#             BasicConv2d(64, 96, kernel_size=(3,3), stride=1)
+#         )
+
+#     def forward(self, x):
+#         x0 = self.branch0(x)
+#         x1 = self.branch1(x)
+#         out = torch.cat((x0, x1), 1) #Nx{[C]_[cat]}xHxW
+#         return out
+
+#===================================================================================================
+#===================================================================================================
+#===================================================================================================
 def create_net(net_cls, pretrained: bool):
     # if ON_KAGGLE and pretrained:
     #     net = net_cls()
@@ -34,6 +85,11 @@ def create_net(net_cls, pretrained: bool):
     return net
 
 
+#===================================================================================================
+#===================================================================================================
+# ResNet and DenseNet
+#===================================================================================================
+#===================================================================================================
 class ResNet(nn.Module):
     def __init__(self, num_classes,
                  pretrained=False, net_cls=M.resnet50, dropout=False):
@@ -47,6 +103,11 @@ class ResNet(nn.Module):
             )
         else:
             self.net.fc = nn.Linear(self.net.fc.in_features, num_classes)
+
+    #freeze param
+    def freeze(self):
+        for param in self.net.parameters():
+            param.requires_grad = False
 
     def fresh_params(self):
         return self.net.fc.parameters()

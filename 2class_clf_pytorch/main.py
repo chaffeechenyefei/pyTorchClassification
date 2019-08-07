@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import fbeta_score
 from sklearn.exceptions import UndefinedMetricWarning
+
 import torch
 from torch import nn, cuda
 from torch.optim import Adam, SGD
@@ -29,7 +30,7 @@ def main():
     arg('--mode', choices=['train', 'validate', 'predict_valid', 'predict_test'], default='train')
     arg('--run_root', default='result/se50_talking_0.8')
     arg('--fold', type=int, default=0)
-    arg('--model', default='se_resnext50')
+    arg('--model', default='resnet50')
     arg('--ckpt', type=str, default='model_loss_best.pt')
     arg('--pretrained', type=str, default='imagenet')#resnet 1, resnext imagenet
     arg('--batch-size', type=int, default=64)
