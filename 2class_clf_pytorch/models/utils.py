@@ -6,41 +6,91 @@ from models.lovasz import *
 
 import numpy as np
 
-class FocalLoss(nn.Module):
-    def __init__(self, gamma=2.0, alpha=None, size_average=True):
-        super(FocalLoss, self).__init__()
-        self.gamma = gamma
-        self.alpha = alpha
-        if isinstance(alpha, (float, int)):
-            self.alpha = torch.Tensor([alpha, 1 - alpha])
-        if isinstance(alpha, list):
-            self.alpha = torch.Tensor(alpha)
-        self.size_average = size_average
+class TripletLossV1(nn.Module):
+    """Triplet loss with hard positive/negative mining.
+    Reference:
+    Hermans et al. In Defense of the Triplet Loss for Person Re-Identification. arXiv:1703.07737.
+    Code imported from https://github.com/Cysu/open-reid/blob/master/reid/loss/triplet.py.
+    Args:
+        margin (float): margin for triplet.
+    """
 
-    def forward(self, input, target):
-        if input.dim() > 2:
-            # N,C,H,W => N,C,H*W
-            input = input.view(input.size(0), input.size(1), -1)
-            input = input.transpose(1, 2)    # N,C,H*W => N,H*W,C
-            input = input.contiguous().view(-1, input.size(2))   # N,H*W,C => N*H*W,C
-        target = target.view(-1, 1)
+    def __init__(self, margin=0.3, mutual_flag=False,discreteTarget=True):
+        super(TripletLossV1, self).__init__()
+        self.margin = margin
+        self.ranking_loss = nn.MarginRankingLoss(margin=margin)
+        self.mutual = mutual_flag
+        self.targetsFlag = discreteTarget #if True then labels with shape (1,batch_size). if False then labels with shape (batch_size,class_num)
 
-        logpt = F.log_softmax(input)
-        logpt = logpt.gather(1, target)
-        logpt = logpt.view(-1)
-        pt = Variable(logpt.data.exp())
-
-        if self.alpha is not None:
-            if self.alpha.type() != input.data.type():
-                self.alpha = self.alpha.type_as(input.data)
-            at = self.alpha.gather(0, target.data.view(-1))
-            logpt = logpt * Variable(at)
-
-        loss = -1 * (1 - pt)**self.gamma * logpt
-        if self.size_average:
-            return loss.mean()
+    def forward(self, inputs, targets):
+        """
+        Args:
+            inputs: feature matrix with shape (batch_size, feat_dim)
+            targets: ground truth labels with shape (batch_size) //( each value is class idx)
+        """
+        n = inputs.size(0)
+        # inputs = 1. * inputs / (torch.norm(inputs, 2, dim=-1, keepdim=True).expand_as(inputs) + 1e-12)
+        # Compute pairwise distance, replace by the official when merged
+        dist = torch.pow(inputs, 2).sum(dim=1, keepdim=True).expand(n, n)
+        dist = dist + dist.t()
+        dist.addmm_(1, -2, inputs, inputs.t())#1*dist-2*inputs@inputs.t
+        dist = dist.clamp(min=1e-12).sqrt()  # for numerical stability
+        if self.targetsFlag:
+            mask = targets.expand(n, n).eq(targets.expand(n, n).t())
         else:
-            return loss.sum()
+            _,idx_mat = torch.max(targets,1,keepdim=False)
+            mask = idx_mat.expand(n,n).eq(idx_mat.expand(n,n).t())
+
+        # For each anchor, find the hardest positive and negative
+        
+        dist_ap, dist_an = [], []
+        for i in range(n):
+            dist_ap.append(dist[i][mask[i]].max().unsqueeze(0))
+            dist_an.append(dist[i][mask[i] == 0].min().unsqueeze(0))
+        dist_ap = torch.cat(dist_ap)
+        dist_an = torch.cat(dist_an)
+        # Compute ranking hinge loss
+        y = torch.ones_like(dist_an)
+        loss = self.ranking_loss(dist_an, dist_ap, y)
+        if self.mutual:
+            return loss, dist
+        return loss
+
+# class FocalLoss(nn.Module):
+#     def __init__(self, gamma=2.0, alpha=None, size_average=True):
+#         super(FocalLoss, self).__init__()
+#         self.gamma = gamma
+#         self.alpha = alpha
+#         if isinstance(alpha, (float, int)):
+#             self.alpha = torch.Tensor([alpha, 1 - alpha])
+#         if isinstance(alpha, list):
+#             self.alpha = torch.Tensor(alpha)
+#         self.size_average = size_average
+
+#     def forward(self, input, target):
+#         if input.dim() > 2:
+#             # N,C,H,W => N,C,H*W
+#             input = input.view(input.size(0), input.size(1), -1)
+#             input = input.transpose(1, 2)    # N,C,H*W => N,H*W,C
+#             input = input.contiguous().view(-1, input.size(2))   # N,H*W,C => N*H*W,C
+#         target = target.view(-1, 1)
+
+#         logpt = F.log_softmax(input)
+#         logpt = logpt.gather(1, target)
+#         logpt = logpt.view(-1)
+#         pt = Variable(logpt.data.exp())
+
+#         if self.alpha is not None:
+#             if self.alpha.type() != input.data.type():
+#                 self.alpha = self.alpha.type_as(input.data)
+#             at = self.alpha.gather(0, target.data.view(-1))
+#             logpt = logpt * Variable(at)
+
+#         loss = -1 * (1 - pt)**self.gamma * logpt
+#         if self.size_average:
+#             return loss.mean()
+#         else:
+#             return loss.sum()
 
 
 class FocalLoss_BCE(nn.Module):
@@ -54,7 +104,7 @@ class FocalLoss_BCE(nn.Module):
             self.alpha = torch.Tensor(alpha)
         self.size_average = size_average
 
-    def forward(self, input, target):
+    def forward(self, input, target):#target with shape (N, cls_num)
         if input.dim() > 2:
             # N,C,H,W => N,C,H*W
             input = input.view(input.size(0), input.size(1), -1)

@@ -13,8 +13,8 @@ from torchvision.transforms import (
 from transforms import tensor_transform
 from aug import *
 
-N_CLASSES = 1
-DATA_ROOT = '/home/ubuntu/CV/data/Classification2'
+N_CLASSES = 128
+DATA_ROOT = '/home/ubuntu/CV/data/furniture'
 # DATA_ROOT = '/home/ubuntu/CV/data/wework_activity/Classification/multi_data'
 
 image_size = 256
@@ -39,8 +39,9 @@ class TrainDataset(Dataset):
 
         # for cls in range(N_CLASSES):
         #     target[cls] = int(lb[cls + 1])
-        clsval = int(lb[5])
+        # clsval = int(lb[5])
         # target = torch.from_numpy(np.array(item.attribute_ids))
+        clsval = int(lb)-1
         target = torch.from_numpy(np.array(clsval))
         return image, target
 
@@ -117,7 +118,7 @@ def load_test_image(item, root: Path, tta_code):
 
 def load_image(item, root: Path) -> Image.Image:
     # print(str(root + '/' + f'{item.id}.jpg'))
-    image = cv2.imread(str(root + '/' + f'{item.id}.jpg'))
+    image = cv2.imread(str(root + '/' + f'{item.id}'))
     # print(image.shape)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     return image

@@ -28,7 +28,7 @@ def main():
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
     arg('--mode', choices=['train', 'validate', 'predict_valid', 'predict_test'], default='train')
-    arg('--run_root', default='result/se50_talking_0.8')
+    arg('--run_root', default='result/furniture')
     arg('--fold', type=int, default=0)
     arg('--model', default='resnet50')
     arg('--ckpt', type=str, default='model_loss_best.pt')
@@ -48,7 +48,7 @@ def main():
 
     args = parser.parse_args()
     run_root = Path(args.run_root)
-    folds = pd.read_csv('train_val_test.csv')
+    folds = pd.read_csv('train_val_test_furniture.csv')
     # train_root = DATA_ROOT + '/' + ('train_sample' if args.use_sample else 'train')
     train_root = DATA_ROOT
     # valid_root = DATA_ROOT + '/' + 'validate'
@@ -75,6 +75,7 @@ def main():
         )
 
     criterion = nn.BCEWithLogitsLoss(reduction='none')
+    # criterion = nn.CrossEnropyLoss(reduction='none)
 
     if 'se' not in args.model and 'ception' not in args.model and 'dpn' not in args.model:
         model = getattr(models, args.model)(
@@ -127,7 +128,7 @@ def main():
             train(params=all_params, **train_kwargs)
 
     elif args.mode == 'validate':
-        valid_loader = make_loader(valid_fold, test_transform, name='valid')
+        valid_loader = make_loader(valid_fold, valid_root ,image_transform=test_transform, name='valid')
         load_model(model, Path(str(run_root) + '/' + args.ckpt))
         validation(model, criterion, tqdm.tqdm(valid_loader, desc='Validation'),
                    use_cuda=use_cuda)
@@ -275,8 +276,9 @@ def train(args, model: nn.Module, criterion, *, params,
                     inputs, targets = inputs.cuda(), targets.cuda()
                 outputs = model(inputs)
                 outputs = outputs.squeeze()
-                targets = targets.float()
-                loss = _reduce_loss(criterion(outputs, targets))
+                # targets = targets.float()
+                # loss = _reduce_loss(criterion(outputs, targets))
+                loss = softmax_loss(outputs, targets)
                 batch_size = inputs.size(0)
                 (batch_size * loss).backward()
                 if (i + 1) % args.step == 0:
@@ -332,21 +334,31 @@ def validation(
             if use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
             outputs = model(inputs)
-            outputs = outputs.squeeze()
-            targets = targets.float()
-            loss = criterion(outputs, targets)
-            all_losses.append(_reduce_loss(loss).item())
-            predictions = torch.sigmoid(outputs)
-            all_predictions.append(predictions.cpu().numpy())
-    all_predictions = np.concatenate(all_predictions)
-    all_targets = np.concatenate(all_targets)
+            # outputs = outputs.squeeze()
+            # targets = targets.float()
+            # loss = criterion(outputs, targets)
+            loss = softmax_loss(outputs, targets)
+            all_losses.append(loss.data.cpu().numpy())
+            all_predictions.append(outputs)
+    all_predictions = torch.cat(all_predictions)
+    value, all_predictions = all_predictions.topk(1, dim=1, largest=True, sorted=True)
+    all_predictions = all_predictions.data.cpu().numpy()
+    all_targets = torch.cat(all_targets).data.cpu().numpy()
 
     metrics = {}
+    metrics['valid_f1'] = fbeta_score(all_targets, all_predictions, beta=1, average='macro')
+    metrics['valid_loss'] = np.mean(all_losses)            
+    #         all_losses.append(_reduce_loss(loss).item())
+    #         predictions = torch.sigmoid(outputs)
+    #         all_predictions.append(predictions.cpu().numpy())
+    # all_predictions = np.concatenate(all_predictions)
+    # all_targets = np.concatenate(all_targets)
+    # metrics = {}
     # metrics['Recall'] = recall_score(all_targets, all_predictions)
     # metrics['Precision'] = precision_score(all_targets, all_predictions)
     # metrics['F1 score'] = f1_score(all_targets, all_predictions)
-    metrics['AUC'] = roc_auc_score(all_targets, all_predictions)
-    metrics['valid_loss'] = np.mean(all_losses)
+    # metrics['AUC'] = roc_auc_score(all_targets, all_predictions)
+    # metrics['valid_loss'] = np.mean(all_losses)
     print(' | '.join(f'{k} {v:.3f}' for k, v in sorted(metrics.items(), key=lambda kv: -kv[1])))
 
     return metrics
@@ -354,6 +366,12 @@ def validation(
 
 def _reduce_loss(loss):
     return loss.sum() / loss.shape[0]
+
+
+def softmax_loss(results, labels):
+    labels = labels.view(-1)
+    loss = F.cross_entropy(results, labels, reduce=True)
+    return loss
 
 
 if __name__ == '__main__':

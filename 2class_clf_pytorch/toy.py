@@ -3,55 +3,57 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class maskLayer(nn.Module):
-    def __init__(self):
-        super(maskLayer, self).__init__()
-        self.k = 100.0
+class TripletLoss(nn.Module):
+    """Triplet loss with hard positive/negative mining.
+    Reference:
+    Hermans et al. In Defense of the Triplet Loss for Person Re-Identification. arXiv:1703.07737.
+    Code imported from https://github.com/Cysu/open-reid/blob/master/reid/loss/triplet.py.
+    Args:
+        margin (float): margin for triplet.
+    """
 
-    def forward(self, input, imgSize):
-        # input: N,4
+    def __init__(self, margin=0.3, mutual_flag=False):
+        super(TripletLoss, self).__init__()
+        self.margin = margin
+        self.ranking_loss = nn.MarginRankingLoss(margin=margin)
+        self.mutual = mutual_flag
 
-        x = torch.mm(input, torch.transpose(torch.tensor([1.0, 0, 0, 0]).unsqueeze(0), 1, 0)) * imgSize  # N,1
-        y = torch.mm(input, torch.transpose(torch.tensor([0, 1.0, 0, 0]).unsqueeze(0), 1, 0)) * imgSize  # N,1
-        xr = torch.mm(input, torch.transpose(torch.tensor([1.0, 0, 1.0, 0]).unsqueeze(0), 1, 0)) * imgSize  # N,1
-        yb = torch.mm(input, torch.transpose(torch.tensor([0, 1.0, 0, 1.0]).unsqueeze(0), 1, 0)) * imgSize  # N,1
-        # xr = x + w
-        # yb = y + h
-        xcols = torch.arange(0, imgSize, dtype=torch.float)  # 1,cols
-        yrows = torch.arange(0, imgSize, dtype=torch.float)  # 1,rows
+    def forward(self, inputs, targets):
+        """
+        Args:
+            inputs: feature matrix with shape (batch_size, feat_dim)
+            targets: ground truth labels with shape (num_classes)
+        """
+        n = inputs.size(0)
+        # inputs = 1. * inputs / (torch.norm(inputs, 2, dim=-1, keepdim=True).expand_as(inputs) + 1e-12)
+        # Compute pairwise distance, replace by the official when merged
+        dist = torch.pow(inputs, 2).sum(dim=1, keepdim=True).expand(n, n)
+        dist = dist + dist.t()
+        dist.addmm_(1, -2, inputs, inputs.t())#1*dist-2*inputs@inputs.t
+        dist = dist.clamp(min=1e-12).sqrt()  # for numerical stability
+        # For each anchor, find the hardest positive and negative
+        mask = targets.expand(n, n).eq(targets.expand(n, n).t())
+        dist_ap, dist_an = [], []
+        for i in range(n):
+            dist_ap.append(dist[i][mask[i]].max().unsqueeze(0))
+            dist_an.append(dist[i][mask[i] == 0].min().unsqueeze(0))
+        dist_ap = torch.cat(dist_ap)
+        dist_an = torch.cat(dist_an)
+        # Compute ranking hinge loss
+        y = torch.ones_like(dist_an)
+        loss = self.ranking_loss(dist_an, dist_ap, y)
+        if self.mutual:
+            return loss, dist
+        return loss
 
-        bxcols = xcols.repeat(x.size()[0], 1)  # N,cols
-        byrows = yrows.repeat(x.size()[0], 1)  # N,rows
 
-        bx = x.repeat(1, imgSize)  # N,cols
-        by = y.repeat(1, imgSize)
+batchSz = 64
+featDim = 128
+clsNum = 10
+embeddings = torch.randn((batchSz,featDim))
+ftargets = torch.rand((batchSz,clsNum))
+targets = ftargets.max(1,keepdim=True)
 
-        bxr = xr.repeat(1, imgSize)
-        byb = yb.repeat(1, imgSize)
-
-        # h(x-xl) => N,cols/rows
-        hx_xl = torch.sigmoid((bxcols - bx) * self.k)
-        hx_xr = torch.sigmoid((bxcols - bxr) * self.k)
-        hy_yt = torch.sigmoid((byrows - by) * self.k)
-        hy_yb = torch.sigmoid((byrows - byb) * self.k)
-
-        s1 = (hx_xl - hx_xr).unsqueeze(1).repeat(1, imgSize, 1)  # N,ools -> N,1,cols -> N,rows,cols
-        s2 = (hy_yt - hy_yb).unsqueeze(2).repeat(1, 1, imgSize)  # N,rows -> N,rows,1 -> N,rows,cols
-
-        s3 = (s1 * s2).unsqueeze(1)#N,1,rows,cols
-
-        return s3
-
-batchsize = 64
-k = 4
-embeddings = torch.rand((batchsize,k))
-embeddings.requires_grad = True
-# print(embeddings)
-M = maskLayer()
-
-feat = M.forward(embeddings,32)
-
-print(feat)
 
 
 
