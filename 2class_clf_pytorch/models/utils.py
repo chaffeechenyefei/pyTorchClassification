@@ -6,6 +6,32 @@ from models.lovasz import *
 
 import numpy as np
 
+##========================================================================
+##Basic function
+##========================================================================
+def idx_2_one_hot(y_idx,nCls):
+    """
+    y_idx:  LongTensor shape:[1,batch_size] or [batch_size,1]
+    y_one_hot:FloatTensor shape:[batch_size, nCls]
+    """
+    y_idx = torch.LongTensor(y_idx).view(-1,1)
+    batch_size = y_idx.shape[0]
+    y_one_hot = torch.zeros(batch_size,nCls)
+    y_one_hot.scatter_(1, y_idx, 1.)
+    return y_one_hot
+
+def one_hot_2_idx(y_one_hot):
+    """
+    y_one_hot:FloatTensor shape:[batch_size, nCls]
+    y_idx: LongTensor shape:[batch_size,1]
+    """
+    _,idx_mat = torch.max(y_one_hot,1,keepdim=False)
+    y_idx = idx_mat.view(-1,1)
+    return y_idx
+
+##========================================================================
+##Basic Loss Module
+##========================================================================
 class TripletLossV1(nn.Module):
     """Triplet loss with hard positive/negative mining.
     Reference:
@@ -18,7 +44,7 @@ class TripletLossV1(nn.Module):
     def __init__(self, margin=0.3, mutual_flag=False,discreteTarget=True):
         super(TripletLossV1, self).__init__()
         self.margin = margin
-        self.ranking_loss = nn.MarginRankingLoss(margin=margin)
+        self.ranking_loss = nn.MarginRankingLoss(margin=margin,reduction='mean')
         self.mutual = mutual_flag
         self.targetsFlag = discreteTarget #if True then labels with shape (1,batch_size). if False then labels with shape (batch_size,class_num)
 
@@ -36,8 +62,9 @@ class TripletLossV1(nn.Module):
         dist.addmm_(1, -2, inputs, inputs.t())#1*dist-2*inputs@inputs.t
         dist = dist.clamp(min=1e-12).sqrt()  # for numerical stability
         if self.targetsFlag:
+            targets = targets.view(1,-1)#(1,batch_size)
             mask = targets.expand(n, n).eq(targets.expand(n, n).t())
-        else:
+        else:#one hot ----> discreate
             _,idx_mat = torch.max(targets,1,keepdim=False)
             mask = idx_mat.expand(n,n).eq(idx_mat.expand(n,n).t())
 
@@ -94,7 +121,7 @@ class TripletLossV1(nn.Module):
 
 
 class FocalLoss_BCE(nn.Module):
-    def __init__(self, gamma=2.0, alpha=None, size_average=True):
+    def __init__(self, gamma=2.0, alpha=None, size_average=True,discreteTarget=False,nCls=-1):
         super(FocalLoss_BCE, self).__init__()
         self.gamma = gamma
         self.alpha = alpha
@@ -103,6 +130,9 @@ class FocalLoss_BCE(nn.Module):
         if isinstance(alpha, list):
             self.alpha = torch.Tensor(alpha)
         self.size_average = size_average
+        self.targetsFlag = discreteTarget
+        self._nCls = nCls
+
 
     def forward(self, input, target):#target with shape (N, cls_num)
         if input.dim() > 2:
@@ -110,12 +140,15 @@ class FocalLoss_BCE(nn.Module):
             input = input.view(input.size(0), input.size(1), -1)
             input = input.transpose(1, 2)    # N,C,H*W => N,H*W,C
             input = input.contiguous().view(-1, input.size(2))   # N,H*W,C => N*H*W,C
-        target = target.view(-1)
+        if targetsFlag:#discrete-->contineous
+            y = idx_2_one_hot(target, self._nCls)
+        else:
+            y = target.view(-1)#<-> pt.view(-1) and BCE is point-wise
 
         # pt = torch.sigmoid(input)
         pt = input
         pt = pt.view(-1)
-        error = torch.abs(pt - target)
+        error = torch.abs(pt - y)
         log_error = torch.log(error)
         loss = -1 * (1 - error)**self.gamma * log_error
         if self.size_average:
