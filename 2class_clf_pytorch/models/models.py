@@ -116,6 +116,36 @@ class ResNet(nn.Module):
         return self.net(x)
 
 
+#my_model = nn.Sequential(*list(pretrained_model.children())[:-1])
+class ResNetV2(nn.Module):
+    def __init__(self, num_classes,
+                 pretrained=False, net_cls=M.resnet50, dropout=False,fc_dim = 1024):
+        super(ResNetV2,self).__init__()
+        self.net = create_net(net_cls, pretrained=pretrained)
+        self.net.avgpool = AvgPool()
+        if dropout:
+            self.net.fc = nn.Sequential(
+                nn.Dropout(),
+                nn.Linear(self.net.fc.in_features, fc_dim),
+                nn.ReLU(),
+            )
+        else:
+            self.net.fc = nn.Linear(self.net.fc.in_features, fc_dim)
+        self.net.last_fc = nn.Linear(fc_dim, num_classes)
+
+    #freeze param
+    def freeze(self):
+        for param in self.net.parameters():
+            param.requires_grad = False
+
+    def fresh_params(self):
+        return self.net.fc.parameters()
+
+    def forward(self, x):
+        fc1 = self.net(x)
+        fc2 = self.last_fc(fc1)
+        return fc1,fc2
+
 class DenseNet(nn.Module):
     def __init__(self, num_classes,
                  pretrained=False, net_cls=M.densenet121):
@@ -630,7 +660,7 @@ dpn_68b = partial(dpn68b)
 
 resnet18 = partial(ResNet, net_cls=M.resnet18)
 resnet34 = partial(ResNet, net_cls=M.resnet34)
-resnet50 = partial(ResNet, net_cls=M.resnet50)
+resnet50 = partial(ResNetV2, net_cls=M.resnet50)
 resnet101 = partial(ResNet, net_cls=M.resnet101)
 resnet152 = partial(ResNet, net_cls=M.resnet152)
 

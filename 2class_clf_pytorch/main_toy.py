@@ -22,7 +22,7 @@ from transforms import train_transform, test_transform
 from utils import (write_event, load_model, mean_df, ThreadingDataLoader as DataLoader,
                    ON_KAGGLE)
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
-from models.utils import TripletLossV1
+from models.utils import *
 #os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
 
 def main():
@@ -34,9 +34,9 @@ def main():
     arg('--model', default='resnet50')
     arg('--ckpt', type=str, default='model_loss_best.pt')
     arg('--pretrained', type=str, default='imagenet')#resnet 1, resnext imagenet
-    arg('--batch-size', type=int, default=64)
+    arg('--batch-size', type=int, default=32)
     arg('--step', type=str, default=8)
-    arg('--workers', type=int, default=8)
+    arg('--workers', type=int, default=16)
     arg('--lr', type=float, default=3e-5)
     arg('--patience', type=int, default=4)
     arg('--clean', action='store_true')
@@ -46,6 +46,7 @@ def main():
     arg('--use-sample', action='store_true', help='use a sample of the dataset')
     arg('--debug', action='store_true')
     arg('--limit', type=int)
+    arg('--imgsize',type=int, default = 256)
 
     args = parser.parse_args()
     run_root = Path(args.run_root)
@@ -69,10 +70,10 @@ def main():
     #DataLoader
     def make_loader(df: pd.DataFrame, root, image_transform, name='train') -> DataLoader:
         return DataLoader(
-            TrainDataset(root, df, debug=args.debug, name=name),
+            TrainDataset(root, df, debug=args.debug, name=name, imgsize = args.imgsize),
             shuffle=True,
             batch_size=args.batch_size,
-            num_workers=16,
+            num_workers=args.workers,
         )
 
     criterion = nn.BCEWithLogitsLoss(reduction='none')
@@ -272,16 +273,17 @@ def train(args, model: nn.Module, criterion, *, params,
         try:
             mean_loss = 0
 
-            for i, (inputs, targets) in enumerate(tl):
+            for i, (inputs, targets) in enumerate(tl):#enumerate() turns tl into index, ele_of_tl
                 if use_cuda:
                     inputs, targets = inputs.cuda(), targets.cuda()
-                outputs = model(inputs)
+                fc1, outputs = model(inputs)
                 outputs = outputs.squeeze()
+                fc1 = fc1.squeeze()
                 # targets = targets.float()
                 # loss = _reduce_loss(criterion(outputs, targets))
                 loss1 = softmax_loss(outputs, targets)
 
-                loss2 = TripletLossV1(discreteTarget=True)(outputs,targets)
+                loss2 = TripletLossV1(discreteTarget=True)(fc1,targets)
                 loss = loss1+0.1*loss2
                 batch_size = inputs.size(0)
                 (batch_size * loss).backward()
@@ -334,10 +336,10 @@ def validation(
     all_losses, all_predictions, all_targets = [], [], []
     with torch.no_grad():
         for inputs, targets in valid_loader:
-            all_targets.append(targets)
+            all_targets.append(targets)#torch@cpu
             if use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
-            outputs = model(inputs)
+            fc1, outputs = model(inputs)#torch@gpu
             # outputs = outputs.squeeze()
             # targets = targets.float()
             # loss = criterion(outputs, targets)
@@ -345,13 +347,20 @@ def validation(
             all_losses.append(loss.data.cpu().numpy())
             all_predictions.append(outputs)
     all_predictions = torch.cat(all_predictions)
+    all_targets = torch.cat(all_targets)#list->torch
+
+    acc = topkAcc(all_predictions,all_targets.cuda(),topk=(1,5))
+
     value, all_predictions = all_predictions.topk(1, dim=1, largest=True, sorted=True)
+
     all_predictions = all_predictions.data.cpu().numpy()
-    all_targets = torch.cat(all_targets).data.cpu().numpy()
+    all_targets =all_targets.data.cpu().numpy()
 
     metrics = {}
     metrics['valid_f1'] = fbeta_score(all_targets, all_predictions, beta=1, average='macro')
-    metrics['valid_loss'] = np.mean(all_losses)            
+    metrics['valid_loss'] = np.mean(all_losses)
+    metrics['valid_top1'] = acc[0].item()    
+    metrics['valid_top5'] = acc[1].item()    
     #         all_losses.append(_reduce_loss(loss).item())
     #         predictions = torch.sigmoid(outputs)
     #         all_predictions.append(predictions.cpu().numpy())

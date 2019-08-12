@@ -29,6 +29,24 @@ def one_hot_2_idx(y_one_hot):
     y_idx = idx_mat.view(-1,1)
     return y_idx
 
+def topkAcc(output, target, topk=(1,)):
+    """
+    Computes the precision@k for the specified values of k
+    output: [N,nCls]
+    target: [1,N]or[N,1] discrete
+    """
+    maxk = max(topk)
+    batch_size = target.size(0)
+
+    _, pred = output.topk(maxk, 1, True, True)#pred = [N,maxk]
+    pred = pred.t()#pred = [maxk,N]
+    correct = pred.eq(target.view(1, -1).expand_as(pred))#target.view(1, -1).expand_as(pred): [1,N]=>[maxk,N]
+
+    res = []
+    for k in topk:
+        correct_k = correct[:k].view(-1).float().sum(0)
+        res.append(correct_k.mul_(100.0 / batch_size))
+    return res
 ##========================================================================
 ##Basic Loss Module
 ##========================================================================

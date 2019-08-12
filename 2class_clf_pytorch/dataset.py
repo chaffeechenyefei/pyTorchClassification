@@ -17,22 +17,23 @@ N_CLASSES = 128
 DATA_ROOT = '/home/ubuntu/CV/data/furniture'
 # DATA_ROOT = '/home/ubuntu/CV/data/wework_activity/Classification/multi_data'
 
-image_size = 256
+# image_size = 256
 
 class TrainDataset(Dataset):
-    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train'):
+    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize = 256):
         super().__init__()
         self._root = root
         self._df = df
         self._debug = debug
         self._name = name
+        self._imgsize = imgsize
 
     def __len__(self):
         return len(self._df)
 
     def __getitem__(self, idx: int):
         item = self._df.iloc[idx]
-        image = load_transform_image(item, self._root, debug=self._debug, name=self._name)
+        image = load_transform_image(item, self._root, imgsize = self._imgsize,debug=self._debug, name=self._name)
         # target = torch.zeros(N_CLASSES)
         lb = item.attribute_ids
         # print(lb)
@@ -47,21 +48,22 @@ class TrainDataset(Dataset):
 
 
 class TTADataset:
-    def __init__(self, root: Path, df: pd.DataFrame, tta_code):
+    def __init__(self, root: Path, df: pd.DataFrame, tta_code , imgsize = 256):
         self._root = root
         self._df = df
         self._tta_code = tta_code
+        self._imgsize = imgsize
 
     def __len__(self):
         return len(self._df)
 
     def __getitem__(self, idx):
         item = self._df.iloc[idx % len(self._df)]
-        image = load_test_image(item, self._root, self._tta_code)
+        image = load_test_image(item, self._root, self._tta_code, self._imgsize)
         return image, item.id
     
     
-def load_transform_image(item, root: Path, debug: bool = False, name: str = 'train'):
+def load_transform_image(item, root: Path, imgsize=256,debug: bool = False, name: str = 'train'):
     image = load_image(item, root)
 
     if name == 'train':
@@ -76,14 +78,14 @@ def load_transform_image(item, root: Path, debug: bool = False, name: str = 'tra
     else:
         image = random_cropping(image, ratio=0.8, is_random=False)
 
-    image = cv2.resize(image ,(image_size, image_size))
+    image = cv2.resize(image ,(imgsize, imgsize))
 
     if debug:
         image.save('_debug.png')
 
     image = np.transpose(image, (2, 0, 1))
     image = image.astype(np.float32)
-    image = image.reshape([-1, image_size, image_size])
+    image = image.reshape([-1, imgsize, imgsize])
     image = image / 255.0
 
     # is_venn = True
@@ -96,14 +98,14 @@ def load_transform_image(item, root: Path, debug: bool = False, name: str = 'tra
 
     return torch.FloatTensor(image)
 
-def load_test_image(item, root: Path, tta_code):
+def load_test_image(item, root: Path, tta_code, imgsize):
     image = load_image(item, root)
     image = aug_image(image, augment = tta_code)
-    image = cv2.resize(image ,(image_size, image_size))
+    image = cv2.resize(image ,(imgsize, imgsize))
 
     image = np.transpose(image, (2, 0, 1))
     image = image.astype(np.float32)
-    image = image.reshape([-1, image_size, image_size])
+    image = image.reshape([-1, imgsize, imgsize])
     image = image / 255.0
 
     # is_venn = True
