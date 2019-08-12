@@ -14,6 +14,8 @@ from .inceptionv4 import *
 from .inceptionresnetv2 import *
 from .dpn import *
 
+from dictLayer import DictLayer
+
 __all__ = ['SENet', 'senet154', 'se_resnet50', 'se_resnet101', 'se_resnet152',
            'se_resnext50_32x4d', 'se_resnext101_32x4d']
 from collections import OrderedDict
@@ -117,6 +119,7 @@ class ResNet(nn.Module):
 
 
 #my_model = nn.Sequential(*list(pretrained_model.children())[:-1])
+#resnet+1024fc+128fc+softmax
 class ResNetV2(nn.Module):
     def __init__(self, num_classes,
                  pretrained=False, net_cls=M.resnet50, dropout=False,fc_dim = 1024):
@@ -125,13 +128,18 @@ class ResNetV2(nn.Module):
         self.net.avgpool = AvgPool()
         if dropout:
             self.net.fc = nn.Sequential(
-                nn.Dropout(),
                 nn.Linear(self.net.fc.in_features, fc_dim),
+                nn.Dropout(),
                 nn.ReLU(),
             )
         else:
-            self.net.fc = nn.Linear(self.net.fc.in_features, fc_dim)
-        self.net.last_fc = nn.Linear(fc_dim, num_classes)
+            self.net.fc = nn.Sequential(
+                nn.Linear(self.net.fc.in_features, fc_dim),
+                nn.ReLU(),
+                )
+            
+
+        self.last_fc = nn.Linear(fc_dim, num_classes)
 
     #freeze param
     def freeze(self):
@@ -145,6 +153,44 @@ class ResNetV2(nn.Module):
         fc1 = self.net(x)
         fc2 = self.last_fc(fc1)
         return fc1,fc2
+
+
+class ResNetV3(nn.Module):
+    def __init__(self, num_classes,
+                 pretrained=False, net_cls=M.resnet50, dropout=False,fc_dim_per_class = 10):
+        super(ResNetV2,self).__init__()
+        self.net = create_net(net_cls, pretrained=pretrained)
+        self.net.avgpool = AvgPool()
+
+        if dropout:
+            self.net.fc = nn.Sequential(
+                nn.Linear(self.net.fc.in_features, 1024),
+                nn.Dropout(),
+                nn.ReLU(),
+            )
+        else:
+            self.net.fc = nn.Sequential(
+                nn.Linear(self.net.fc.in_features, 1024),
+                nn.ReLU(),
+                )
+
+        self.dict_layer = DictLayer( 1024,  fc_dim_per_class*num_classes , num_classes)
+        self.last_layer = nn.Linear(fc_dim_per_class*num_classes, num_classes)
+
+    #freeze param
+    def freeze(self):
+        for param in self.net.parameters():
+            param.requires_grad = False
+
+    def fresh_params(self):
+        return self.net.fc.parameters()
+
+    def forward(self, x, targets):
+        fc1 = self.net(x)
+        fc1 = self.dict_layer(fc1,targets)
+        fc2 = self.last_fc(fc1)
+        loss = self.dict_layer.getLoss()
+        return fc1,fc2,loss
 
 class DenseNet(nn.Module):
     def __init__(self, num_classes,
@@ -660,7 +706,9 @@ dpn_68b = partial(dpn68b)
 
 resnet18 = partial(ResNet, net_cls=M.resnet18)
 resnet34 = partial(ResNet, net_cls=M.resnet34)
-resnet50 = partial(ResNetV2, net_cls=M.resnet50)
+resnet50 = partial(ResNet, net_cls=M.resnet50)
+resnet50V2 = partial(ResNetV2, net_cls=M.resnet50)
+resnet50V3 = partial(ResNetV3, net_cls=M.resnet50)
 resnet101 = partial(ResNet, net_cls=M.resnet101)
 resnet152 = partial(ResNet, net_cls=M.resnet152)
 

@@ -37,6 +37,7 @@ class DictLayer(nn.Module):
 		N = inputs.size(0)
 		eachGroup = self.output_features // self.nCls
 		#inputs:[N,input_features] x [output_features, input_features]^T
+		inputs = inputs.view(N,-1)
 		y = torch.mm(inputs,self.weights.t()) #y:[N,output_features]
 
 		if self.bias is not None:
