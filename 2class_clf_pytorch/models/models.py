@@ -14,7 +14,7 @@ from .inceptionv4 import *
 from .inceptionresnetv2 import *
 from .dpn import *
 
-from dictLayer import DictLayer
+from models.dictLayer import DictLayer
 
 __all__ = ['SENet', 'senet154', 'se_resnet50', 'se_resnet101', 'se_resnet152',
            'se_resnext50_32x4d', 'se_resnext101_32x4d']
@@ -158,7 +158,7 @@ class ResNetV2(nn.Module):
 class ResNetV3(nn.Module):
     def __init__(self, num_classes,
                  pretrained=False, net_cls=M.resnet50, dropout=False,fc_dim_per_class = 10):
-        super(ResNetV2,self).__init__()
+        super(ResNetV3,self).__init__()
         self.net = create_net(net_cls, pretrained=pretrained)
         self.net.avgpool = AvgPool()
 
@@ -188,7 +188,7 @@ class ResNetV3(nn.Module):
     def forward(self, x, targets):
         fc1 = self.net(x)
         fc1 = self.dict_layer(fc1,targets)
-        fc2 = self.last_fc(fc1)
+        fc2 = self.last_layer(fc1)
         loss = self.dict_layer.getLoss()
         return fc1,fc2,loss
 

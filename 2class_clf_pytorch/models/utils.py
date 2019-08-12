@@ -9,14 +9,16 @@ import numpy as np
 ##========================================================================
 ##Basic function
 ##========================================================================
-def idx_2_one_hot(y_idx,nCls):
+def idx_2_one_hot(y_idx,nCls,use_cuda=False):
     """
     y_idx:  LongTensor shape:[1,batch_size] or [batch_size,1]
     y_one_hot:FloatTensor shape:[batch_size, nCls]
     """
-    y_idx = torch.LongTensor(y_idx).view(-1,1)
+    y_idx = y_idx.long().view(-1,1)
     batch_size = y_idx.shape[0]
     y_one_hot = torch.zeros(batch_size,nCls)
+    if use_cuda:
+        y_one_hot = y_one_hot.cuda()
     y_one_hot.scatter_(1, y_idx, 1.)
     return y_one_hot
 
@@ -159,7 +161,7 @@ class FocalLoss_BCE(nn.Module):
             input = input.transpose(1, 2)    # N,C,H*W => N,H*W,C
             input = input.contiguous().view(-1, input.size(2))   # N,H*W,C => N*H*W,C
         if targetsFlag:#discrete-->contineous
-            y = idx_2_one_hot(target, self._nCls)
+            y = idx_2_one_hot(target, self._nCls, use_cuda = True)
         else:
             y = target.view(-1)#<-> pt.view(-1) and BCE is point-wise
 

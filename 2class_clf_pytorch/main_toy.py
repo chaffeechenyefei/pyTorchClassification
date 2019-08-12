@@ -339,7 +339,7 @@ def validation(
             all_targets.append(targets)#torch@cpu
             if use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
-            fc1, outputs = model(inputs,targets)#torch@gpu
+            fc1, outputs, _ = model(inputs,targets)#torch@gpu
             # outputs = outputs.squeeze()
             # targets = targets.float()
             # loss = criterion(outputs, targets)
