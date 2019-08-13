@@ -31,7 +31,7 @@ def main():
     arg('--mode', choices=['train', 'validate', 'predict_valid', 'predict_test'], default='train')
     arg('--run_root', default='result/furniture_toy')
     arg('--fold', type=int, default=0)
-    arg('--model', default='resnet50V4')
+    arg('--model', default='resnet50V3')
     arg('--ckpt', type=str, default='model_loss_best.pt')
     arg('--pretrained', type=str, default='imagenet')#resnet 1, resnext imagenet
     arg('--batch-size', type=int, default=32)
@@ -276,12 +276,15 @@ def train(args, model: nn.Module, criterion, *, params,
             for i, (inputs, targets) in enumerate(tl):#enumerate() turns tl into index, ele_of_tl
                 if use_cuda:
                     inputs, targets = inputs.cuda(), targets.cuda()
-                outputs= model(inputs)
+                fc1, outputs, dict_loss= model(inputs,targets)
                 outputs = outputs.squeeze()
+                fc1 = fc1.squeeze()
                 # targets = targets.float()
                 # loss = _reduce_loss(criterion(outputs, targets))
-                loss = softmax_loss(outputs, targets)
+                loss1 = softmax_loss(outputs, targets)
 
+                loss2 = TripletLossV1(discreteTarget=True)(fc1,targets)
+                loss = loss1+0.1*loss2 + dict_loss
                 batch_size = inputs.size(0)
                 (batch_size * loss).backward()
                 if (i + 1) % args.step == 0:
@@ -336,7 +339,7 @@ def validation(
             all_targets.append(targets)#torch@cpu
             if use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
-            outputs = model(inputs)#torch@gpu
+            fc1, outputs, _ = model(inputs,targets)#torch@gpu
             # outputs = outputs.squeeze()
             # targets = targets.float()
             # loss = criterion(outputs, targets)

@@ -56,9 +56,57 @@ class DictLayer(nn.Module):
         self._dictloss = dictLoss/N
 
         return y
-        
+
     def getLoss(self):
         return self._dictloss
 
+
+class DictConv2dLayer(nn.Module):
+    def __init__(self,in_channels,out_channels,nCls,kernel_size,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros',alpha = 0.05):
+        super(DictConv2dLayer,self).__init__()
+        self. _in_channels = in_channels
+        self._out_channels = out_channels
+        self._kernel_size = kernel_size
+        self._stride = stride
+        self._padding = padding
+        self._dilation = dilation
+        self._groups = groups
+        self._bias = bias
+        self._padding_mode = padding_mode
+        self._nCls = nCls
+        self._alpha = alpha
+        self._dictloss = 0.0
+
+        self.conv2d_layer = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias , padding_mode)
+
+    def forward(self,inputs,targets):
+        N = inputs.size(0)
+        C = inputs.size(1)
+        eachGroup = self._out_channels // self._nCls
+        targets = targets.view(-1,1)
+
+        y = self.conv2d_layer(inputs)#[N,C,H,W]
+        #suppose targets are discrete
+        # h = idx_2_one_hot(targets,self.nCls, use_cuda = True)#h:[N,nCls]
+
+        h_mat = torch.ones_like(y) #[N,C, H,W]
+        for b in range(0,N):
+            t = int(targets[b,0].item())
+            h_mat[b,t,:,:] = 0.0
+
+        dictLoss = y.mul(h_mat)
+        dictLoss = self._alpha*torch.norm(dictLoss)
+
+        self._dictloss = dictLoss/N
+
+        return y
+
+    def getLoss(self):
+        return self._dictloss
+
+
+
+
+        
 
 

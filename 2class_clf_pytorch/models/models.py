@@ -174,7 +174,7 @@ class ResNetV3(nn.Module):
                 nn.ReLU(),
                 )
 
-        self.dict_layer = DictLayer( 1024,  fc_dim_per_class*num_classes , num_classes)
+        self.dict_layer = DictLayer( 1024,  fc_dim_per_class*num_classes , num_classes,alpha=0.1)
         self.last_layer = nn.Linear(fc_dim_per_class*num_classes, num_classes)
 
     #freeze param
@@ -191,6 +191,43 @@ class ResNetV3(nn.Module):
         fc2 = self.last_layer(fc1)
         loss = self.dict_layer.getLoss()
         return fc1,fc2,loss
+
+class ResNetV4(nn.Module):
+    def __init__(self, num_classes,
+                 pretrained=False, net_cls=M.resnet50, dropout=False):
+        super(ResNetV4,self).__init__()
+        self.net = create_net(net_cls, pretrained=pretrained)
+        self.net.avgpool = AvgPool()
+
+        if dropout:
+            self.net.fc = nn.Sequential(
+                nn.Linear(self.net.fc.in_features, 1024),
+                nn.Dropout(),
+                nn.ReLU(),
+                nn.Linear(1024, 1024),
+                nn.ReLU(),
+                nn.Linear(1024, num_classes),
+                )
+        else:
+            self.net.fc = nn.Sequential(
+                nn.Linear(self.net.fc.in_features, 1024),
+                nn.ReLU(),
+                nn.Linear(1024, 1024),
+                nn.ReLU(),
+                nn.Linear(1024, num_classes),
+                )
+
+    #freeze param
+    def freeze(self):
+        for param in self.net.parameters():
+            param.requires_grad = False
+
+    def fresh_params(self):
+        return self.net.fc.parameters()
+
+    def forward(self, x):
+        fc1 = self.net(x)
+        return fc1
 
 class DenseNet(nn.Module):
     def __init__(self, num_classes,
@@ -709,6 +746,7 @@ resnet34 = partial(ResNet, net_cls=M.resnet34)
 resnet50 = partial(ResNet, net_cls=M.resnet50)
 resnet50V2 = partial(ResNetV2, net_cls=M.resnet50)
 resnet50V3 = partial(ResNetV3, net_cls=M.resnet50)
+resnet50V4 = partial(ResNetV4, net_cls=M.resnet50)
 resnet101 = partial(ResNet, net_cls=M.resnet101)
 resnet152 = partial(ResNet, net_cls=M.resnet152)
 
