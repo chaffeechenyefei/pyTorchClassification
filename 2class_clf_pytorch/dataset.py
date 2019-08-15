@@ -47,6 +47,88 @@ class TrainDataset(Dataset):
         return image, target
 
 
+# #item \
+# # - attribute_ids - id - folds - data: a,b
+class TrainDatasetSelected(Dataset):
+    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize = 256):
+        super().__init__()
+        self._root = root
+        self._df = df
+        self._debug = debug
+        self._name = name
+        self._imgsize = imgsize
+        self._dfA = df[df['data']=='a']
+        self._dfB = df[df['data']=='b']
+
+    def __len__(self):
+        return len(self._df)
+
+    def __getitem__(self, idx: int):
+        #choose label from data a
+        #choose any tow sample from data b bcz 1 image per class
+        labelA = int(idx % 128)
+        #https://stackoverflow.com/questions/21415661/logical-operators-for-boolean-indexing-in-pandas
+        # dfA = self._df[(self._df['data'] == 'a')&(self._df['attribute_ids'] == str(labelA))]
+        dfA = self._dfA[self._dfA['attribute_ids'] == str(labelA)]
+        len_dfA = len(dfA)
+        pair_idxA = [random.randint(0, len_dfA) for _ in range(2)]
+
+        imagesA = []
+        imagesB = []
+        single_targetsA = []
+        single_targetsB = []
+
+        for idxA in pair_idxA:
+            item = dfA.iloc[idxA]
+            image = load_transform_image(item, self._root, imgsize=self._imgsize, debug=self._debug, name=self._name)
+            lb = int(item.attribute_ids) - 1
+            assert(lb < N_CLASSES)
+            imagesA.append(image)
+            single_targetsA.append(lb)
+
+        dfB = self._dfB
+        len_dfB = len(dfB)
+        pair_idxB = [random.randint(0, len_dfB) for _ in range(2)]
+
+        for idxB in pair_idxB:
+            item = dfB.iloc[idxB]
+            image = load_transform_image(item, self._root, imgsize=self._imgsize, debug=self._debug, name=self._name)
+            imagesB.append(image)
+            lb = int(item.attribute_ids) - 1
+            single_targetsB.append(lb)
+
+        return (imagesA,imagesB), (single_targetsA,single_targetsB)
+
+
+def collate_TrainDatasetSelected(batch):
+    """
+    special collate_fn function for UDF class TrainDatasetSelected
+    :param batch: 
+    :return: 
+    """
+    # batch_size = len(batch)
+    imagesA = []
+    imagesB = []
+    labelsA = []
+    labelsB = []
+
+    for b in batch:
+        if b[0] is None:
+            continue
+        else:
+            imagesA.extend(b[0][0])
+            imagesB.extend(b[0][1])
+            labelsA.extend(b[1][0])
+            labelsB.extend(b[1][1])
+
+    imagesA.extend(imagesB)
+    labelsA.extend(labelsB)
+
+    imagesA = torch.stack(imagesA,0) #images : list of [C,H,W] -> [Len_of_list, C, H,W]
+    labelsA = torch.from_numpy(np.array(labelsA))
+    return imagesA,labelsA
+
+
 class TTADataset:
     def __init__(self, root: Path, df: pd.DataFrame, tta_code , imgsize = 256):
         self._root = root

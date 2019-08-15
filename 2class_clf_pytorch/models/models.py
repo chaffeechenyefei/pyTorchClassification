@@ -187,10 +187,10 @@ class ResNetV3(nn.Module):
 
     def forward(self, x, targets):
         fc1 = self.net(x)
-        fc1 = self.dict_layer(fc1,targets)
-        fc2 = self.last_layer(fc1)
+        fc2 = self.dict_layer(fc1,targets)
+        fc3 = self.last_layer(fc2)
         loss = self.dict_layer.getLoss()
-        return fc1,fc2,loss
+        return fc2,fc3,loss
 
 class ResNetV4(nn.Module):
     def __init__(self, num_classes,
@@ -203,19 +203,18 @@ class ResNetV4(nn.Module):
             self.net.fc = nn.Sequential(
                 nn.Linear(self.net.fc.in_features, 1024),
                 nn.Dropout(),
-                nn.ReLU(),
-                nn.Linear(1024, 1024),
-                nn.ReLU(),
-                nn.Linear(1024, num_classes),
+                nn.LeakyReLU(),
                 )
         else:
             self.net.fc = nn.Sequential(
                 nn.Linear(self.net.fc.in_features, 1024),
-                nn.ReLU(),
-                nn.Linear(1024, 1024),
-                nn.ReLU(),
-                nn.Linear(1024, num_classes),
+                nn.LeakyReLU(),
                 )
+
+        self.fc_layer = nn.Linear(1024, 1024)
+        self.last_layer = nn.Linear(1024,num_classes)
+
+
 
     #freeze param
     def freeze(self):
@@ -227,7 +226,10 @@ class ResNetV4(nn.Module):
 
     def forward(self, x):
         fc1 = self.net(x)
-        return fc1
+        fc2 = self.fc_layer(fc1)
+        fc2 = F.leaky_relu(fc2)
+        fc3 = self.last_layer(fc2)
+        return fc2,fc3
 
 class DenseNet(nn.Module):
     def __init__(self, num_classes,

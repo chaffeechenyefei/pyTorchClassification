@@ -17,13 +17,14 @@ from torch.optim import Adam, SGD
 import tqdm
 import os
 import models.models as models
-from dataset import TrainDataset, TTADataset, get_ids, N_CLASSES, DATA_ROOT
+from dataset import TrainDataset, TTADataset, get_ids, N_CLASSES, DATA_ROOT,collate_TrainDatasetSelected,TrainDatasetSelected
 from transforms import train_transform, test_transform
 from utils import (write_event, load_model, mean_df, ThreadingDataLoader as DataLoader,
                    ON_KAGGLE)
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
 from models.utils import *
 #os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -69,12 +70,23 @@ def main():
 
     #DataLoader
     def make_loader(df: pd.DataFrame, root, image_transform, name='train') -> DataLoader:
-        return DataLoader(
-            TrainDataset(root, df, debug=args.debug, name=name, imgsize = args.imgsize),
-            shuffle=True,
-            batch_size=args.batch_size,
-            num_workers=args.workers,
-        )
+        if name == 'train':
+            return DataLoader(
+                TrainDatasetSelected(root, df, debug=args.debug, name=name, imgsize = args.imgsize),
+                shuffle=True,
+                drop_last=True,
+                batch_size=args.batch_size,
+                num_workers=args.workers,
+                collate_fn=collate_TrainDatasetSelected
+            )
+        else:
+            return DataLoader(
+                TrainDataset(root, df, debug=args.debug, name=name, imgsize = args.imgsize),
+                shuffle=True,
+                drop_last=True,
+                batch_size=args.batch_size,
+                num_workers=args.workers,
+            )
 
     criterion = nn.BCEWithLogitsLoss(reduction='none')
     # criterion = nn.CrossEnropyLoss(reduction='none)
@@ -276,11 +288,16 @@ def train(args, model: nn.Module, criterion, *, params,
             for i, (inputs, targets) in enumerate(tl):#enumerate() turns tl into index, ele_of_tl
                 if use_cuda:
                     inputs, targets = inputs.cuda(), targets.cuda()
-                outputs= model(inputs)
+                feats, outputs= model(inputs)
                 outputs = outputs.squeeze()
-                # targets = targets.float()
-                # loss = _reduce_loss(criterion(outputs, targets))
-                loss = softmax_loss(outputs, targets)
+                feats = feats.squeeze()
+
+                batch_size = outputs.shape[0]
+
+                loss1 = softmax_loss(outputs, targets)
+                loss2 = TripletLossV2()(feats,targets)
+
+                loss = loss1 + loss2
 
                 batch_size = inputs.size(0)
                 (batch_size * loss).backward()
@@ -336,7 +353,7 @@ def validation(
             all_targets.append(targets)#torch@cpu
             if use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
-            outputs = model(inputs)#torch@gpu
+            _,outputs = model(inputs)#torch@gpu
             # outputs = outputs.squeeze()
             # targets = targets.float()
             # loss = criterion(outputs, targets)
@@ -381,7 +398,21 @@ def _reduce_loss(loss):
 def softmax_loss(results, labels):
     labels = labels.view(-1)
     loss = F.cross_entropy(results, labels, reduce=True)
+
     return loss
+
+
+def softmax_lossV2(results,labels):
+
+    softmax_label = labels[labels < N_CLASSES].view(-1)
+    label_len = softmax_label.shape[1]
+    softmax_results = results[:label_len,:]
+    assert(label_len%2==0)
+    loss = F.cross_entropy(softmax_results,softmax_label,reduce=True)
+
+    return loss
+
+
 
 
 if __name__ == '__main__':

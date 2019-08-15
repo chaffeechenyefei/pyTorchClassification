@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from models.utils import *
 
+FLAG_CUDA = torch.cuda.is_available()
+
 def repCol(matA,n:int):
     matB = []
     for i in range(0,matA.size(1)):
@@ -44,7 +46,7 @@ class DictLayer(nn.Module):
             y = y + self.bias.view(1,-1).expand(N,self.output_features)
 
         #suppose targets are discrete
-        h = idx_2_one_hot(targets,self.nCls, use_cuda = True)#h:[N,nCls]
+        h = idx_2_one_hot(targets,self.nCls, use_cuda = FLAG_CUDA)#h:[N,nCls]
 
         h_mat = repCol(h,eachGroup)#[N,output_features]
 

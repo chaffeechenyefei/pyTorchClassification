@@ -163,7 +163,7 @@ for filename in files:
         for patch in patches:
             patch = torch_load_image(patch)
             patch = patch.cuda()
-            pred = torch.sigmoid(model(inputs).squeeze())
+            pred = torch.sigmoid(model(patch).squeeze())
             pred = pred.data.cpu().numpy()
             pred[pred<cls_thresh] = 0
             preds.append(pred)
