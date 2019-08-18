@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 ##Alibaba Search Image
 
+CUDA_FLAG = torch.cuda.is_available()
+
 class maskLayer(nn.Module):
     def __init__(self):
         super(maskLayer, self).__init__()
@@ -19,6 +21,10 @@ class maskLayer(nn.Module):
         # yb = y + h
         xcols = torch.arange(0, imgSize, dtype=torch.float)  # 1,cols
         yrows = torch.arange(0, imgSize, dtype=torch.float)  # 1,rows
+
+        if CUDA_FLAG:
+            xcols = xcols.cuda()
+            yrows = yrows.cuda()
 
         bxcols = xcols.repeat(x.size()[0], 1)  # N,cols
         byrows = yrows.repeat(x.size()[0], 1)  # N,rows

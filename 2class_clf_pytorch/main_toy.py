@@ -35,10 +35,10 @@ def main():
     arg('--model', default='resnet50V4')
     arg('--ckpt', type=str, default='model_loss_best.pt')
     arg('--pretrained', type=str, default='imagenet')#resnet 1, resnext imagenet
-    arg('--batch-size', type=int, default=32)
+    arg('--batch-size', type=int, default=16)
     arg('--step', type=str, default=8)
     arg('--workers', type=int, default=16)
-    arg('--lr', type=float, default=3e-5)
+    arg('--lr', type=float, default=3e-4)
     arg('--patience', type=int, default=4)
     arg('--clean', action='store_true')
     arg('--n-epochs', type=int, default=60)
@@ -51,7 +51,7 @@ def main():
 
     args = parser.parse_args()
     run_root = Path(args.run_root)
-    folds = pd.read_csv('train_val_test_furniture.csv')
+    folds = pd.read_csv('train_val_test_app_furniture.csv')
     # train_root = DATA_ROOT + '/' + ('train_sample' if args.use_sample else 'train')
     train_root = DATA_ROOT
     # valid_root = DATA_ROOT + '/' + 'validate'
@@ -74,7 +74,6 @@ def main():
             return DataLoader(
                 TrainDatasetSelected(root, df, debug=args.debug, name=name, imgsize = args.imgsize),
                 shuffle=True,
-                drop_last=True,
                 batch_size=args.batch_size,
                 num_workers=args.workers,
                 collate_fn=collate_TrainDatasetSelected
@@ -83,7 +82,6 @@ def main():
             return DataLoader(
                 TrainDataset(root, df, debug=args.debug, name=name, imgsize = args.imgsize),
                 shuffle=True,
-                drop_last=True,
                 batch_size=args.batch_size,
                 num_workers=args.workers,
             )
@@ -276,7 +274,7 @@ def train(args, model: nn.Module, criterion, *, params,
     for epoch in range(epoch, n_epochs + 1):
         model.train()
         tq = tqdm.tqdm(total=(args.epoch_size or
-                              len(train_loader) * args.batch_size))
+                              len(train_loader) * args.batch_size * 4))
         tq.set_description(f'Epoch {epoch}, lr {lr}')
         losses = []
         tl = train_loader
@@ -288,13 +286,15 @@ def train(args, model: nn.Module, criterion, *, params,
             for i, (inputs, targets) in enumerate(tl):#enumerate() turns tl into index, ele_of_tl
                 if use_cuda:
                     inputs, targets = inputs.cuda(), targets.cuda()
+                # print(i)
+                # print(len(train_loader))
                 feats, outputs= model(inputs)
                 outputs = outputs.squeeze()
                 feats = feats.squeeze()
 
                 batch_size = outputs.shape[0]
 
-                loss1 = softmax_loss(outputs, targets)
+                loss1 = softmax_lossV2(outputs, targets)
                 loss2 = TripletLossV2()(feats,targets)
 
                 loss = loss1 + loss2
@@ -315,7 +315,9 @@ def train(args, model: nn.Module, criterion, *, params,
 
             write_event(log, step, loss=mean_loss)
             tq.close()
+            print('saving')
             save(epoch + 1)
+            print('validation')
             valid_metrics = validation(model, criterion, valid_loader, use_cuda)
             write_event(log, step, **valid_metrics)
             valid_loss = valid_metrics['valid_loss']
@@ -324,21 +326,17 @@ def train(args, model: nn.Module, criterion, *, params,
             if valid_loss < best_valid_loss:
                 best_valid_loss = valid_loss
                 shutil.copy(str(model_path), str(run_root) + '/model_loss_best.pt')
-  
-#             if epoch == 12:
-#                 lr = 1e-4
-#                 print(f'lr updated to {lr}')
-#                 optimizer = init_optimizer(params, lr)
-#             if epoch == 14:
-#                 lr = 1e-5
-#                 optimizer = init_optimizer(params, lr)
-#                 print(f'lr updated to {lr}')
+
+            if epoch >= 12 and i == 0:
+                lr = lr * 0.9
+                optimizer = init_optimizer(params, lr)
+                print(f'lr updated to {lr}')
 
         except KeyboardInterrupt:
             tq.close()
-#             print('Ctrl+C, saving snapshot')
-#             save(epoch)
-#             print('done.')
+            print('Ctrl+C, saving snapshot')
+            save(epoch)
+            print('done.')
 
             return False
     return True
@@ -405,7 +403,7 @@ def softmax_loss(results, labels):
 def softmax_lossV2(results,labels):
 
     softmax_label = labels[labels < N_CLASSES].view(-1)
-    label_len = softmax_label.shape[1]
+    label_len = softmax_label.shape[0]
     softmax_results = results[:label_len,:]
     assert(label_len%2==0)
     loss = F.cross_entropy(softmax_results,softmax_label,reduce=True)

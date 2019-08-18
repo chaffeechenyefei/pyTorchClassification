@@ -129,8 +129,8 @@ for _file in testList:
 
         feat = feat.data.cpu().numpy()
 
-        pairDist = cosDist(trFeat,feat.reshape(1,-1))
-        # pairDist = euclidean_distances(feat.reshape(1,-1),trFeat)
+        # pairDist = cosDist(trFeat,feat.reshape(1,-1))
+        pairDist = -1*euclidean_distances(feat.reshape(1,-1),trFeat)
         pairDist = pairDist.squeeze()
         # idx = np.argmax(pairDist).item()
         idxs = pairDist.argsort()[-3:][::-1]

@@ -127,21 +127,22 @@ class TripletLossV2(nn.Module):
             inputs: feature matrix with shape (batch_size, feat_dim)
             targets: ground truth labels with shape (batch_size) //( each value is class idx)
         """
-        _targets = targets[targets>=N_CLASSES].view(1,-1)
-        Len = _targets.shape[1]
+        # _targets = targets[targets>=N_CLASSES].view(1,-1)
+        # Len = _targets.shape[1]
+        #
+        # _inputs = inputs[-Len:,:]
 
-        _inputs = inputs[-Len:,:]
 
-
-        n = _inputs.size(0)
+        n = inputs.size(0)
+        targets = targets.view(1,-1)
         # inputs = 1. * inputs / (torch.norm(inputs, 2, dim=-1, keepdim=True).expand_as(inputs) + 1e-12)
         # Compute pairwise distance, replace by the official when merged
-        dist = torch.pow(_inputs, 2).sum(dim=1, keepdim=True).expand(n, n)
+        dist = torch.pow(inputs, 2).sum(dim=1, keepdim=True).expand(n, n)
         dist = dist + dist.t()
-        dist.addmm_(1, -2, _inputs, _inputs.t())  # 1*dist-2*inputs@inputs.t
+        dist.addmm_(1, -2, inputs, inputs.t())  # 1*dist-2*inputs@inputs.t
         dist = dist.clamp(min=1e-12).sqrt()  # for numerical stability
 
-        mask = _targets.expand(n, n).eq(_targets.expand(n, n).t())
+        mask = targets.expand(n, n).eq(targets.expand(n, n).t())
 
 
         # For each anchor, find the hardest positive and negative

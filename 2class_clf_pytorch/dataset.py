@@ -61,7 +61,7 @@ class TrainDatasetSelected(Dataset):
         self._dfB = df[df['data']=='b']
 
     def __len__(self):
-        return len(self._df)
+        return len(self._df)//4
 
     def __getitem__(self, idx: int):
         #choose label from data a
@@ -69,9 +69,9 @@ class TrainDatasetSelected(Dataset):
         labelA = int(idx % 128)
         #https://stackoverflow.com/questions/21415661/logical-operators-for-boolean-indexing-in-pandas
         # dfA = self._df[(self._df['data'] == 'a')&(self._df['attribute_ids'] == str(labelA))]
-        dfA = self._dfA[self._dfA['attribute_ids'] == str(labelA)]
+        dfA = self._dfA[self._dfA['attribute_ids'] == labelA+1]
         len_dfA = len(dfA)
-        pair_idxA = [random.randint(0, len_dfA) for _ in range(2)]
+        pair_idxA = [random.randint(0, len_dfA-1) for _ in range(2)]
 
         imagesA = []
         imagesB = []
@@ -88,7 +88,7 @@ class TrainDatasetSelected(Dataset):
 
         dfB = self._dfB
         len_dfB = len(dfB)
-        pair_idxB = [random.randint(0, len_dfB) for _ in range(2)]
+        pair_idxB = [random.randint(0, len_dfB-1) for _ in range(2)]
 
         for idxB in pair_idxB:
             item = dfB.iloc[idxB]
@@ -121,6 +121,7 @@ def collate_TrainDatasetSelected(batch):
             labelsA.extend(b[1][0])
             labelsB.extend(b[1][1])
 
+    assert (len(imagesA) == len(imagesB))
     imagesA.extend(imagesB)
     labelsA.extend(labelsB)
 
