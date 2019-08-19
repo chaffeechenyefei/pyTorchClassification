@@ -17,9 +17,9 @@ from torch.optim import Adam, SGD
 import tqdm
 import os
 import models.models as models
-from dataset import TrainDataset, TTADataset, get_ids, N_CLASSES, DATA_ROOT,collate_TrainDatasetTriplet,TrainDatasetTriplet
+from dataset import TrainDataset, TTADataset, get_ids, N_CLASSES,OLD_N_CLASSES, DATA_ROOT,collate_TrainDatasetTriplet,TrainDatasetTriplet
 from transforms import train_transform, test_transform
-from utils import (write_event, load_model, mean_df, ThreadingDataLoader as DataLoader,
+from utils import (write_event, load_model, load_par_gpu_model_gpu, mean_df, ThreadingDataLoader as DataLoader,
                    ON_KAGGLE)
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
 from models.utils import *
@@ -39,7 +39,7 @@ def main():
     arg('--model', default='resnet50V4')
     arg('--ckpt', type=str, default='model_loss_best.pt')
     arg('--pretrained', type=str, default='imagenet')#resnet 1, resnext imagenet
-    arg('--batch-size', type=int, default=32)
+    arg('--batch-size', type=int, default=8)
     arg('--step', type=str, default=8)
     arg('--workers', type=int, default=16)
     arg('--lr', type=float, default=3e-4)
@@ -104,23 +104,30 @@ def main():
     # criterion = nn.CrossEnropyLoss(reduction='none)
 
     # se- ception dpn can only use finetuned model from imagenet
+    if args.finetuning:
+        base_model_class = OLD_N_CLASSES
+    else:
+        base_model_class = N_CLASSES
+
     if 'se' not in args.model and 'ception' not in args.model and 'dpn' not in args.model:
         # model=> models.py
         model = getattr(models, args.model)(
-            num_classes=N_CLASSES, pretrained=args.pretrained)
+            num_classes=base_model_class, pretrained=args.pretrained)
     else:
         model = getattr(models, args.model)(
-            num_classes=N_CLASSES, pretrained='imagenet')
+            num_classes=base_model_class, pretrained='imagenet')
 
 
     if 'se' not in args.model and 'ception' not in args.model and 'dpn' not in args.model:
         fresh_params = list(model.fresh_params())
 
+
+
     #finetune::load model with old settings first and then change the last layer for new task!
-    if arg.finetuning:
+    if args.finetuning:
         print('Doing finetune initial...')
-        load_model(model, Path(str(run_root) + '/' + 'model_base.pt') )
-        model.finetuning(109)
+        load_par_gpu_model_gpu(model, Path(str(run_root) + '/' + 'model_base.initial') )
+        model.finetuning(N_CLASSES)
 
     ##params::Add here
     #params list[models.parameters()]
@@ -339,9 +346,9 @@ def train(args, model: nn.Module, criterion, *, params,
                 feats = feats.squeeze()
 
                 loss1 = softmax_loss(outputs, targets)
-                loss2 = TripletLossV1()(feats,targets)
+                loss2 = TripletLossV1(margin=0.5)(feats,targets)
 
-                loss = loss1 + loss2
+                loss = 0.5*loss1 + loss2
 
                 batch_size = inputs.size(0)
 
@@ -374,9 +381,9 @@ def train(args, model: nn.Module, criterion, *, params,
 
         except KeyboardInterrupt:
             tq.close()
-            print('Ctrl+C, saving snapshot')
-            save(epoch)
-            print('done.')
+            # print('Ctrl+C, saving snapshot')
+            # save(epoch)
+            # print('done.')
 
             return False
     return True

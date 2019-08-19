@@ -13,6 +13,7 @@ from torchvision.transforms import (
 from transforms import tensor_transform
 from aug import *
 
+OLD_N_CLASSES = 128
 N_CLASSES = 109
 DATA_ROOT = '/home/ubuntu/CV/data/furniture'
 # DATA_ROOT = '/home/ubuntu/CV/data/wework_activity/Classification/multi_data'
@@ -29,10 +30,10 @@ class TrainDataset(Dataset):
         self._imgsize = imgsize
 
     def __len__(self):
-        return 100*len(self._df)
+        return len(self._df)
 
     def __getitem__(self, idx: int):
-        _idx = idx // 100
+        _idx = idx
         item = self._df.iloc[_idx]
         image = load_transform_image(item, self._root, imgsize = self._imgsize,debug=self._debug, name=self._name)
         # target = torch.zeros(N_CLASSES)
@@ -59,7 +60,7 @@ class TrainDatasetTriplet(Dataset):
         self._imgsize = imgsize
 
     def __len__(self):#how much times will each epoch sample
-        return len(self._df)
+        return len(self._df)*20
 
     @staticmethod
     def tbatch():
@@ -70,7 +71,12 @@ class TrainDatasetTriplet(Dataset):
         # choose any tow sample from data b bcz 1 image per class
         labelA = int(idx % N_CLASSES)
         dfA = self._df[self._df['attribute_ids'] == labelA]
+        while dfA.empty:
+            labelA = random.randint(0,N_CLASSES-1)
+            dfA = self._df[self._df['attribute_ids'] == labelA]
+
         len_dfA = len(dfA)
+        assert(len_dfA!=0)
         pair_idxA = [random.randint(0, len_dfA - 1) for _ in range(4)]#有重采样
 
         images = []
@@ -229,11 +235,11 @@ def load_transform_image(item, root: Path, imgsize=256,debug: bool = False, name
     image = load_image(item, root)
 
     if name == 'train':
-        # alpha = random.uniform(0, 0.2)
-        # image = do_brightness_shift(image, alpha=alpha)
+        alpha = random.uniform(0, 0.2)
+        image = do_brightness_shift(image, alpha=alpha)
         image = random_flip(image, p=0.5)
-        # angle = random.uniform(0, 1)*360
-        # image = rotate(image, angle, center=None, scale=1.0)
+        angle = random.uniform(0, 1)*10
+        image = rotate(image, angle, center=None, scale=1.0)
         ratio = random.uniform(0.7, 0.99)
         image = random_cropping(image, ratio = ratio, is_random = True)
         #image = random_erasing(image, probability=0.5, sl=0.02, sh=0.4, r1=0.3)
