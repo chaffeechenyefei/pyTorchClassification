@@ -27,7 +27,7 @@ ckpt = 'model_loss_best.pt'
 model_name = 'resnet50V4'
 
 data_root = '/Users/yefeichen/Database/furniture/furniture_red_tech/'
-N_Cls = 128
+N_Cls = 109
 
 model_root = Path(model_root)
 

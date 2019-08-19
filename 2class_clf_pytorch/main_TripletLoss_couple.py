@@ -17,7 +17,7 @@ from torch.optim import Adam, SGD
 import tqdm
 import os
 import models.models as models
-from dataset import TrainDataset, TTADataset, get_ids, N_CLASSES, DATA_ROOT,collate_TrainDatasetTriplet,TrainDatasetTriplet
+from dataset import TrainDataset, TTADataset, get_ids, N_CLASSES, DATA_ROOT,collate_TrainDatasetSelected,TrainDatasetSelected
 from transforms import train_transform, test_transform
 from utils import (write_event, load_model, mean_df, ThreadingDataLoader as DataLoader,
                    ON_KAGGLE)
@@ -26,11 +26,7 @@ from models.utils import *
 #os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
 
 
-#=============================================================================================================================
-#main
-#=============================================================================================================================
 def main():
-    #cmd and arg parser
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
     arg('--mode', choices=['train', 'validate', 'predict_valid', 'predict_test'], default='train')
@@ -39,7 +35,7 @@ def main():
     arg('--model', default='resnet50V4')
     arg('--ckpt', type=str, default='model_loss_best.pt')
     arg('--pretrained', type=str, default='imagenet')#resnet 1, resnext imagenet
-    arg('--batch-size', type=int, default=32)
+    arg('--batch-size', type=int, default=16)
     arg('--step', type=str, default=8)
     arg('--workers', type=int, default=16)
     arg('--lr', type=float, default=3e-4)
@@ -52,31 +48,22 @@ def main():
     arg('--debug', action='store_true')
     arg('--limit', type=int)
     arg('--imgsize',type=int, default = 256)
-    arg('--finetuning',action='store_true')
-
-    #cuda version T/F
-    use_cuda = cuda.is_available()
 
     args = parser.parse_args()
-    #run_root: model/weights root
     run_root = Path(args.run_root)
-    #csv for train/test/validate [id,attribute_id,fold,data]
-    folds = pd.read_csv('train_val_test_chair.csv')
-
-    #Not used @this version...
+    folds = pd.read_csv('train_val_test_app_furniture.csv')
+    # train_root = DATA_ROOT + '/' + ('train_sample' if args.use_sample else 'train')
     train_root = DATA_ROOT
+    # valid_root = DATA_ROOT + '/' + 'validate'
     valid_root = DATA_ROOT
+    #Only images in train_sample are used folds = folds[bool vec]
+    if args.use_sample:
+        folds = folds[folds['Id'].isin(set(get_ids(train_root)))]
 
-    # #Only images in train_sample are used folds = folds[bool vec]
-    # if args.use_sample:
-    #     folds = folds[folds['Id'].isin(set(get_ids(train_root)))]
-
-    #split train/valid fold
     train_fold = folds[folds['fold'] == 0]
     valid_fold = folds[folds['fold'] == 1]
 
     #limit the size of train/valid data
-    #W::Do not use it because the limited size of training data may not contain whole class
     if args.limit:
         train_fold = train_fold[:args.limit]
         valid_fold = valid_fold[:args.limit]
@@ -85,11 +72,11 @@ def main():
     def make_loader(df: pd.DataFrame, root, image_transform, name='train') -> DataLoader:
         if name == 'train':
             return DataLoader(
-                TrainDatasetTriplet(root, df, debug=args.debug, name=name, imgsize = args.imgsize),
+                TrainDatasetSelected(root, df, debug=args.debug, name=name, imgsize = args.imgsize),
                 shuffle=True,
                 batch_size=args.batch_size,
                 num_workers=args.workers,
-                collate_fn= collate_TrainDatasetTriplet
+                collate_fn=collate_TrainDatasetSelected
             )
         else:
             return DataLoader(
@@ -99,37 +86,24 @@ def main():
                 num_workers=args.workers,
             )
 
-    #Not used in this version
     criterion = nn.BCEWithLogitsLoss(reduction='none')
     # criterion = nn.CrossEnropyLoss(reduction='none)
 
-    # se- ception dpn can only use finetuned model from imagenet
     if 'se' not in args.model and 'ception' not in args.model and 'dpn' not in args.model:
-        # model=> models.py
         model = getattr(models, args.model)(
             num_classes=N_CLASSES, pretrained=args.pretrained)
     else:
         model = getattr(models, args.model)(
             num_classes=N_CLASSES, pretrained='imagenet')
 
+    use_cuda = cuda.is_available()
 
     if 'se' not in args.model and 'ception' not in args.model and 'dpn' not in args.model:
         fresh_params = list(model.fresh_params())
 
-    #finetune::load model with old settings first and then change the last layer for new task!
-    if arg.finetuning:
-        print('Doing finetune initial...')
-        load_model(model, Path(str(run_root) + '/' + 'model_base.pt') )
-        model.finetuning(109)
-
-    ##params::Add here
-    #params list[models.parameters()]
     all_params = list(model.parameters())
-
-    #apply parallel gpu if available
     model = torch.nn.DataParallel(model)
 
-    #gpu first
     if use_cuda:
         model = model.cuda()
 
@@ -158,15 +132,12 @@ def main():
             use_cuda=use_cuda,
         )
 
-        train(params=all_params, **train_kwargs)
-
-        # #if args.pretrained and args.model != 'se_resnext50' and args.model != 'se_resnext101':
-        # if 'se' not in args.model and 'ception' not in args.model and args.pretrained and 'dpn' not in args.model:
-        #     if train(params=fresh_params, n_epochs=1, **train_kwargs):
-        #         train(params=all_params, **train_kwargs)
-        # else:
-        #     train(params=all_params, **train_kwargs)
-
+        #if args.pretrained and args.model != 'se_resnext50' and args.model != 'se_resnext101':
+        if 'se' not in args.model and 'ception' not in args.model and args.pretrained and 'dpn' not in args.model:
+            if train(params=fresh_params, n_epochs=1, **train_kwargs):
+                train(params=all_params, **train_kwargs)
+        else:
+            train(params=all_params, **train_kwargs)
 
     elif args.mode == 'validate':
         valid_loader = make_loader(valid_fold, valid_root ,image_transform=test_transform, name='valid')
@@ -228,13 +199,8 @@ def main():
                         tta_code=tta_code,
                         workers=8,
                         use_cuda=True)
-#=============================================================================================================================
-#End of main
-#=============================================================================================================================
 
-#=============================================================================================================================
-#predict
-#=============================================================================================================================
+
 def predict(model, root: Path, df: pd.DataFrame, out_path: Path,
             batch_size: int, tta_code:list , workers: int, use_cuda: bool):
 
@@ -265,19 +231,15 @@ def predict(model, root: Path, df: pd.DataFrame, out_path: Path,
     df.to_hdf(out_path, 'prob', index_label='id')
     print(f'Saved predictions to {out_path}')
 
-#=============================================================================================================================
-#train
-#=============================================================================================================================
+
 def train(args, model: nn.Module, criterion, *, params,
           train_loader, valid_loader, init_optimizer, use_cuda,
           n_epochs=None, patience=2, max_lr_changes=3) -> bool:
     lr = args.lr
     n_epochs = n_epochs or args.n_epochs
-    params = list(params)#in case params is not a list
-    #add params into optimizer
+    params = list(params)
     optimizer = init_optimizer(params, lr)
 
-    #model load/save path
     run_root = Path(args.run_root)
 
     model_path = Path(str(run_root) + '/' + 'model.pt')
@@ -294,7 +256,6 @@ def train(args, model: nn.Module, criterion, *, params,
         best_valid_loss = float('inf')
         best_f1 = 0
 
-
     lr_changes = 0
 
     save = lambda ep: torch.save({
@@ -310,18 +271,10 @@ def train(args, model: nn.Module, criterion, *, params,
     valid_losses = []
     valid_f1s = []
     lr_reset_epoch = epoch
-
-    #epoch loop
     for epoch in range(epoch, n_epochs + 1):
         model.train()
         tq = tqdm.tqdm(total=(args.epoch_size or
-                              TrainDatasetTriplet.tbatch()*len(train_loader) * args.batch_size))
-
-        if epoch >= 10:
-            lr = lr * 0.9
-            optimizer = init_optimizer(params, lr)
-            print(f'lr updated to {lr}')
-
+                              len(train_loader) * args.batch_size * 4))
         tq.set_description(f'Epoch {epoch}, lr {lr}')
         losses = []
         tl = train_loader
@@ -333,18 +286,20 @@ def train(args, model: nn.Module, criterion, *, params,
             for i, (inputs, targets) in enumerate(tl):#enumerate() turns tl into index, ele_of_tl
                 if use_cuda:
                     inputs, targets = inputs.cuda(), targets.cuda()
-
+                # print(i)
+                # print(len(train_loader))
                 feats, outputs= model(inputs)
                 outputs = outputs.squeeze()
                 feats = feats.squeeze()
 
-                loss1 = softmax_loss(outputs, targets)
-                loss2 = TripletLossV1()(feats,targets)
+                batch_size = outputs.shape[0]
+
+                loss1 = softmax_lossV2(outputs, targets)
+                loss2 = TripletLossV2()(feats,targets)
 
                 loss = loss1 + loss2
 
                 batch_size = inputs.size(0)
-
                 (batch_size * loss).backward()
                 if (i + 1) % args.step == 0:
                     optimizer.step()
@@ -371,6 +326,11 @@ def train(args, model: nn.Module, criterion, *, params,
             if valid_loss < best_valid_loss:
                 best_valid_loss = valid_loss
                 shutil.copy(str(model_path), str(run_root) + '/model_loss_best.pt')
+
+            if epoch >= 12 and i == 0:
+                lr = lr * 0.9
+                optimizer = init_optimizer(params, lr)
+                print(f'lr updated to {lr}')
 
         except KeyboardInterrupt:
             tq.close()
@@ -411,8 +371,8 @@ def validation(
     metrics = {}
     metrics['valid_f1'] = fbeta_score(all_targets, all_predictions, beta=1, average='macro')
     metrics['valid_loss'] = np.mean(all_losses)
-    metrics['valid_top1'] = acc[0].item()    
-    metrics['valid_top5'] = acc[1].item()    
+    metrics['valid_top1'] = acc[0].item()
+    metrics['valid_top5'] = acc[1].item()
     #         all_losses.append(_reduce_loss(loss).item())
     #         predictions = torch.sigmoid(outputs)
     #         all_predictions.append(predictions.cpu().numpy())

@@ -13,7 +13,7 @@ from torchvision.transforms import (
 from transforms import tensor_transform
 from aug import *
 
-N_CLASSES = 128
+N_CLASSES = 109
 DATA_ROOT = '/home/ubuntu/CV/data/furniture'
 # DATA_ROOT = '/home/ubuntu/CV/data/wework_activity/Classification/multi_data'
 
@@ -29,10 +29,11 @@ class TrainDataset(Dataset):
         self._imgsize = imgsize
 
     def __len__(self):
-        return len(self._df)
+        return 100*len(self._df)
 
     def __getitem__(self, idx: int):
-        item = self._df.iloc[idx]
+        _idx = idx // 100
+        item = self._df.iloc[_idx]
         image = load_transform_image(item, self._root, imgsize = self._imgsize,debug=self._debug, name=self._name)
         # target = torch.zeros(N_CLASSES)
         lb = item.attribute_ids
@@ -42,9 +43,87 @@ class TrainDataset(Dataset):
         #     target[cls] = int(lb[cls + 1])
         # clsval = int(lb[5])
         # target = torch.from_numpy(np.array(item.attribute_ids))
-        clsval = int(lb)-1
+        clsval = int(lb)
+        assert(clsval>=0 and clsval < N_CLASSES)
         target = torch.from_numpy(np.array(clsval))
         return image, target
+
+
+class TrainDatasetTriplet(Dataset):
+    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256):
+        super().__init__()
+        self._root = root
+        self._df = df
+        self._debug = debug
+        self._name = name
+        self._imgsize = imgsize
+
+    def __len__(self):#how much times will each epoch sample
+        return len(self._df)
+
+    @staticmethod
+    def tbatch():
+        return 8
+
+    def __getitem__(self, idx: int):
+        # choose label from data a
+        # choose any tow sample from data b bcz 1 image per class
+        labelA = int(idx % N_CLASSES)
+        dfA = self._df[self._df['attribute_ids'] == labelA]
+        len_dfA = len(dfA)
+        pair_idxA = [random.randint(0, len_dfA - 1) for _ in range(4)]#有重采样
+
+        images = []
+        targets = []
+
+        #pos
+        for idxA in pair_idxA:
+            item = dfA.iloc[idxA]
+            image = load_transform_image(item, self._root, imgsize=self._imgsize, debug=self._debug,
+                                         name=self._name)
+            lb = int(item.attribute_ids)
+            assert (lb < N_CLASSES)
+            images.append(image)
+            targets.append(lb)
+
+        #neg
+        dfB = self._df[self._df['attribute_ids'] != labelA]
+        len_dfB = len(dfB)
+        pair_idxB = [random.randint(0, len_dfB - 1) for _ in range(4)]#有重采样
+
+        for idxB in pair_idxB:
+            item = dfB.iloc[idxB]
+            image = load_transform_image(item, self._root, imgsize=self._imgsize, debug=self._debug,
+                                         name=self._name)
+            images.append(image)
+            lb = int(item.attribute_ids)
+            targets.append(lb)
+
+        return images, targets
+
+
+def collate_TrainDatasetTriplet(batch):
+    """
+    special collate_fn function for UDF class TrainDatasetTriplet
+    :param batch: 
+    :return: 
+    """
+    # batch_size = len(batch)
+    images = []
+    labels = []
+
+    for b in batch:
+        if b[0] is None:
+            continue
+        else:
+            images.extend(b[0])
+            labels.extend(b[1])
+
+    assert (len(images) == len(labels))
+
+    images = torch.stack(images, 0)  # images : list of [C,H,W] -> [Len_of_list, C, H,W]
+    labels = torch.from_numpy(np.array(labels))
+    return images, labels
 
 
 # #item \
@@ -66,7 +145,7 @@ class TrainDatasetSelected(Dataset):
     def __getitem__(self, idx: int):
         #choose label from data a
         #choose any tow sample from data b bcz 1 image per class
-        labelA = int(idx % 128)
+        labelA = int(idx % N_CLASSES)
         #https://stackoverflow.com/questions/21415661/logical-operators-for-boolean-indexing-in-pandas
         # dfA = self._df[(self._df['data'] == 'a')&(self._df['attribute_ids'] == str(labelA))]
         dfA = self._dfA[self._dfA['attribute_ids'] == labelA+1]
@@ -144,8 +223,8 @@ class TTADataset:
         item = self._df.iloc[idx % len(self._df)]
         image = load_test_image(item, self._root, self._tta_code, self._imgsize)
         return image, item.id
-    
-    
+
+
 def load_transform_image(item, root: Path, imgsize=256,debug: bool = False, name: str = 'train'):
     image = load_image(item, root)
 
@@ -156,7 +235,7 @@ def load_transform_image(item, root: Path, imgsize=256,debug: bool = False, name
         # angle = random.uniform(0, 1)*360
         # image = rotate(image, angle, center=None, scale=1.0)
         ratio = random.uniform(0.7, 0.99)
-        image = random_cropping(image, ratio = 0.8, is_random = True)
+        image = random_cropping(image, ratio = ratio, is_random = True)
         #image = random_erasing(image, probability=0.5, sl=0.02, sh=0.4, r1=0.3)
     else:
         image = random_cropping(image, ratio=0.8, is_random=False)
@@ -203,7 +282,8 @@ def load_test_image(item, root: Path, tta_code, imgsize):
 
 def load_image(item, root: Path) -> Image.Image:
     # print(str(root + '/' + f'{item.id}.jpg'))
-    image = cv2.imread(str(root + '/' + f'{item.id}'))
+    # image = cv2.imread(str(root + '/' + f'{item.id}'))
+    image = cv2.imread(str(f'{item.id}'))
     # print(image.shape)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     return image

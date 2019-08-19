@@ -29,50 +29,6 @@ class AvgPool(nn.Module):
     def forward(self, x):
         return F.avg_pool2d(x, x.shape[2:])
 
-# #import from others github
-# class BasicConv2d(nn.Module):
-
-#     def __init__(self, in_planes, out_planes, kernel_size, stride, padding=0):
-#         super(BasicConv2d, self).__init__()
-#         self.conv = nn.Conv2d(in_planes, out_planes,
-#                               kernel_size=kernel_size, stride=stride,
-#                               padding=padding, bias=False) # verify bias false
-#         self.bn = nn.BatchNorm2d(out_planes,
-#                                  eps=0.001, # value found in tensorflow
-#                                  momentum=0.1, # default pytorch value
-#                                  affine=True)
-#         self.relu = nn.ReLU(inplace=True)
-
-#     def forward(self, x):
-#         x = self.conv(x)
-#         x = self.bn(x)
-#         x = self.relu(x)
-#         return x
-
-# #Example of mix two branch into one output
-# class Mixed_4a(nn.Module):
-
-#     def __init__(self):
-#         super(Mixed_4a, self).__init__()
-
-#         self.branch0 = nn.Sequential(
-#             BasicConv2d(160, 64, kernel_size=1, stride=1),
-#             BasicConv2d(64, 96, kernel_size=3, stride=1)
-#         )
-
-#         self.branch1 = nn.Sequential(
-#             BasicConv2d(160, 64, kernel_size=1, stride=1),
-#             BasicConv2d(64, 64, kernel_size=(1,7), stride=1, padding=(0,3)),
-#             BasicConv2d(64, 64, kernel_size=(7,1), stride=1, padding=(3,0)),
-#             BasicConv2d(64, 96, kernel_size=(3,3), stride=1)
-#         )
-
-#     def forward(self, x):
-#         x0 = self.branch0(x)
-#         x1 = self.branch1(x)
-#         out = torch.cat((x0, x1), 1) #Nx{[C]_[cat]}xHxW
-#         return out
-
 #===================================================================================================
 #===================================================================================================
 #===================================================================================================
@@ -194,27 +150,24 @@ class ResNetV3(nn.Module):
 
 class ResNetV4(nn.Module):
     def __init__(self, num_classes,
-                 pretrained=False, net_cls=M.resnet50, dropout=False):
+                 pretrained=False,net_cls=M.resnet50, dropout=False):
         super(ResNetV4,self).__init__()
         self.net = create_net(net_cls, pretrained=pretrained)
         self.net.avgpool = AvgPool()
-
         if dropout:
             self.net.fc = nn.Sequential(
                 nn.Linear(self.net.fc.in_features, 1024),
                 nn.Dropout(),
                 nn.LeakyReLU(),
-                )
+            )
         else:
             self.net.fc = nn.Sequential(
                 nn.Linear(self.net.fc.in_features, 1024),
                 nn.LeakyReLU(),
-                )
+            )
 
         self.fc_layer = nn.Linear(1024, 1024)
-        self.last_layer = nn.Linear(1024,num_classes)
-
-
+        self.last_layer = nn.Linear(1024, num_classes)
 
     #freeze param
     def freeze(self):
@@ -230,6 +183,11 @@ class ResNetV4(nn.Module):
         fc2 = F.leaky_relu(fc2)
         fc3 = self.last_layer(fc2)
         return fc2,fc3
+
+    def finetuning(self,num_classes):
+        #only change the last layer
+        self.last_layer = nn.Linear(1024,num_classes)
+
 
 class DenseNet(nn.Module):
     def __init__(self, num_classes,
