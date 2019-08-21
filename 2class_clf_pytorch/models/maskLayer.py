@@ -41,7 +41,7 @@ class maskLayer(nn.Module):
         hy_yt = torch.sigmoid((byrows - by) * self.k)
         hy_yb = torch.sigmoid((byrows - byb) * self.k)
 
-        s1 = (hx_xl - hx_xr).unsqueeze(1).repeat(1, imgSize, 1)  # N,ools -> N,1,cols -> N,rows,cols
+        s1 = (hx_xl - hx_xr).unsqueeze(1).repeat(1, imgSize, 1)  # N,cols -> N,1,cols -> N,rows,cols
         s2 = (hy_yt - hy_yb).unsqueeze(2).repeat(1, 1, imgSize)  # N,rows -> N,rows,1 -> N,rows,cols
 
         s3 = (s1 * s2).unsqueeze(1)  # N,1,rows,cols
@@ -60,7 +60,9 @@ if __name__ == '__main__':
     M = maskLayer()
     feat = M.forward(embeddings,32)
 
-    print(feat)
+    print(feat[0,0,:,:].squeeze())
+
+    print('Done')
 
 
 

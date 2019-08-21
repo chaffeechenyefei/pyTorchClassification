@@ -13,7 +13,7 @@ import cv2
 
 def torch_load_image(patch):
     image = cv2.cvtColor(patch, cv2.COLOR_BGR2RGB)
-    image = cropping(image)
+    image = cropping(image,ratio=0.9)
     image = cv2.resize(image ,(256, 256))
     image = np.transpose(image, (2, 0, 1))
     image = image.astype(np.float32)
@@ -26,7 +26,7 @@ model_root = '/Users/yefeichen/Desktop/Work/Project/pyTorchClassification/2class
 ckpt = 'model_loss_best.pt'
 model_name = 'resnet50V4'
 
-data_root = '/Users/yefeichen/Database/furniture/furniture_red_tech/'
+data_root = '/Users/yefeichen/Database/furniture/collect_from_matterport_chair/'
 N_Cls = 109
 
 model_root = Path(model_root)
@@ -56,7 +56,7 @@ fileList = os.listdir(data_root)
 
 for _file in fileList:
     _portion = os.path.splitext(_file)
-    if _portion[1] == '.jpg':
+    if _portion[1] in ['.jpg','.png','.jpeg']:
         imgName = _file
         imgPath = os.path.join(data_root,imgName)
         img = cv2.imread(imgPath)

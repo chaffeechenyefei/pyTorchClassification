@@ -13,6 +13,7 @@ from .xception import *
 from .inceptionv4 import *
 from .inceptionresnetv2 import *
 from .dpn import *
+from .maskLayer import maskLayer
 
 from models.dictLayer import DictLayer
 
@@ -189,6 +190,44 @@ class ResNetV4(nn.Module):
         self.last_layer = nn.Linear(1024,num_classes)
 
 
+##======================================================================================================================
+##ResNet50 + BBox from Alibaba Image Search
+##======================================================================================================================
+class ResNetBBoxMask(nn.Module):
+    def __init__(self, num_classes,
+                 pretrained=False,net_cls=M.resnet50):
+        super(ResNetV5,self).__init__()
+        self.netBBox = create_net(net_cls, pretrained=pretrained)
+        self.netBBox.avgpool = AvgPool()
+        self.netBBox.fc = nn.Linear(self.net.fc.in_features, 4)
+
+        self.mask_layer = maskLayer()
+
+        self.netCls = create_net(net_cls, pretrained=pretrained)
+        self.netCls.avgpool = AvgPool()
+        self.netCls.fc = nn.Sequential(
+            nn.Linear(self.netCls.fc.in_features, 1024),
+            nn.LeakyReLU(),
+        )
+        self.fc_layer = nn.Linear(1024, 1024)
+        self.last_layer = nn.Linear(1024, num_classes)
+
+    def forward(self, x):
+        bbox = self.netBBox(x)
+        bbox = torch.sigmoid(bbox)
+
+        x_hat = self.mask_layer(bbox,x.shape[3])
+        x_hat = x_hat.expand(-1,3,-1,-1)
+
+        next_x = x*x_hat
+
+        fc1 = self.netCls(next_x)
+        fc2 = self.fc_layer(fc1)
+        fc2 = F.leaky_relu(fc2)
+        fc3 = self.last_layer(fc2)
+        return fc2,fc3,bbox,x_hat
+
+
 class DenseNet(nn.Module):
     def __init__(self, num_classes,
                  pretrained=False, net_cls=M.densenet121):
@@ -208,7 +247,45 @@ class DenseNet(nn.Module):
         out = self.net.classifier(out)
         return out
 
+class DenseNetV2(nn.Module):
+    def __init__(self, num_classes,
+                 pretrained=False, net_cls=M.densenet121,dropout=False):
+        super().__init__()
+        self.net = create_net(net_cls, pretrained=pretrained)
+        self.avg_pool = AvgPool()
+        # self.net.classifier = nn.Linear(
+        #     self.net.classifier.in_features, num_classes)
+        if dropout:
+            self.net.classifier = nn.Sequential(
+                nn.Linear(self.net.classifier.in_features, 1024),
+                nn.Dropout(),
+                nn.LeakyReLU(),
+            )
+        else:
+            self.net.classifier = nn.Sequential(
+                nn.Linear(self.net.classifier.in_features, 1024),
+                nn.LeakyReLU(),
+            )
 
+        self.fc_layer = nn.Linear(1024, 1024)
+        self.last_layer = nn.Linear(1024, num_classes)
+
+    def fresh_params(self):
+        return self.net.classifier.parameters()
+
+    def forward(self, x):
+        out = self.net.features(x)
+        out = F.relu(out, inplace=True)
+        out = self.avg_pool(out).view(out.size(0), -1)
+        out = self.net.classifier(out)
+        out = self.fc_layer(out)
+        fc2 = F.leaky_relu(out)
+        out = self.last_layer(fc2)
+        return out
+
+    def finetuning(self,num_classes):
+        #only change the last layer
+        self.last_layer = nn.Linear(1024,num_classes)
 
 """
 ResNet code gently borrowed from

@@ -14,7 +14,7 @@ from transforms import tensor_transform
 from aug import *
 
 OLD_N_CLASSES = 128
-N_CLASSES = 109
+N_CLASSES = 109#109
 DATA_ROOT = '/home/ubuntu/CV/data/furniture'
 # DATA_ROOT = '/home/ubuntu/CV/data/wework_activity/Classification/multi_data'
 
@@ -60,7 +60,7 @@ class TrainDatasetTriplet(Dataset):
         self._imgsize = imgsize
 
     def __len__(self):#how much times will each epoch sample
-        return len(self._df)*20
+        return min(max(len(self._df),20000),40000)
 
     @staticmethod
     def tbatch():
