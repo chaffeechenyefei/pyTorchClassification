@@ -388,6 +388,9 @@ def train(args, model: nn.Module, criterion, *, params,
             return False
     return True
 
+#=============================================================================================================================
+#validation
+#=============================================================================================================================
 def validation(
         model: nn.Module, criterion, valid_loader, use_cuda,
         ) -> Dict[str, float]:

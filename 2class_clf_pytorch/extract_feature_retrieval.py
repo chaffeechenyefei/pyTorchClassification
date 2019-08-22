@@ -60,8 +60,8 @@ model_root = '/Users/yefeichen/Desktop/Work/Project/pyTorchClassification/2class
 ckpt = 'model_loss_best.pt'
 model_name = 'resnet50V4'
 
-data_root = '/Users/yefeichen/Database/furniture/collect_from_matterport_chair/'
-test_root = '/Users/yefeichen/Database/furniture/chair_from_digital/'
+data_root = '/Users/yefeichen/Database/furniture/chair_from_digital/'
+test_root = '/Users/yefeichen/Database/furniture/collect_from_matterport_chair/'
 N_Cls = 109
 
 model_root = Path(model_root)
@@ -95,7 +95,7 @@ for _file in fileList:
         feat = np.load(npPath).reshape(1,-1)
         featList.append(feat)
         nameSp = os.path.splitext(_file)
-        nameList.append(nameSp[0]+'.png')
+        nameList.append(nameSp[0]+'.jpg')
 
 trFeat = np.vstack(featList)
 
@@ -106,7 +106,7 @@ print('Features loaded from data: ' + str(trFeat.shape) )
 #testing
 testList = os.listdir(test_root)
 for _file in testList:
-    if '.jpg' in _file: #'_s.jpg'
+    if '.png' in _file: #'_s.jpg'
         imgName = _file
         imgPath = os.path.join(test_root,imgName)
         img = cv2.imread(imgPath)

@@ -13,10 +13,10 @@ class maskLayer(nn.Module):
     def forward(self, input, imgSize):
         # input: N,4
 
-        x = torch.mm(input, torch.transpose(torch.tensor([1.0, 0, 0, 0]).unsqueeze(0), 1, 0)) * imgSize  # N,1
-        y = torch.mm(input, torch.transpose(torch.tensor([0, 1.0, 0, 0]).unsqueeze(0), 1, 0)) * imgSize  # N,1
-        xr = torch.mm(input, torch.transpose(torch.tensor([1.0, 0, 1.0, 0]).unsqueeze(0), 1, 0)) * imgSize  # N,1
-        yb = torch.mm(input, torch.transpose(torch.tensor([0, 1.0, 0, 1.0]).unsqueeze(0), 1, 0)) * imgSize  # N,1
+        x = torch.mm(input, torch.transpose(torch.tensor([1.0, 0, 0, 0]).unsqueeze(0).cuda(), 1, 0)) * imgSize  # N,1
+        y = torch.mm(input, torch.transpose(torch.tensor([0, 1.0, 0, 0]).unsqueeze(0).cuda(), 1, 0)) * imgSize  # N,1
+        xr = torch.mm(input, torch.transpose(torch.tensor([1.0, 0, 1.0, 0]).unsqueeze(0).cuda(), 1, 0)) * imgSize  # N,1
+        yb = torch.mm(input, torch.transpose(torch.tensor([0, 1.0, 0, 1.0]).unsqueeze(0).cuda(), 1, 0)) * imgSize  # N,1
         # xr = x + w
         # yb = y + h
         xcols = torch.arange(0, imgSize, dtype=torch.float)  # 1,cols

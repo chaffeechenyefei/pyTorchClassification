@@ -14,9 +14,7 @@ from transforms import tensor_transform
 from aug import *
 
 OLD_N_CLASSES = 128
-N_CLASSES = 109#109
-DATA_ROOT = '/home/ubuntu/CV/data/furniture'
-# DATA_ROOT = '/home/ubuntu/CV/data/wework_activity/Classification/multi_data'
+N_CLASSES = 128#109
 
 # image_size = 256
 
@@ -240,13 +238,19 @@ def load_transform_image(item, root: Path, imgsize=256,debug: bool = False, name
         image = random_flip(image, p=0.5)
         angle = random.uniform(0, 1)*10
         image = rotate(image, angle, center=None, scale=1.0)
-        ratio = random.uniform(0.7, 0.99)
-        image = random_cropping(image, ratio = ratio, is_random = True)
+
+        # ratio = random.uniform(0.7, 0.99)
+        # image = random_cropping(image, ratio = ratio, is_random = True)
         #image = random_erasing(image, probability=0.5, sl=0.02, sh=0.4, r1=0.3)
     else:
         image = random_cropping(image, ratio=0.8, is_random=False)
 
-    image = cv2.resize(image ,(imgsize, imgsize))
+    #maintain ratio of length and height
+    imgH, imgW, nCh = image.shape
+    nimgW, nimgH = max(imgW, imgH), max(imgW, imgH)
+    nimage = np.zeros((nimgH, nimgW, nCh), dtype=np.uint8)
+    nimage[:imgH, :imgW, :] = 1*image[:,:,:]
+    image = cv2.resize(nimage ,(imgsize, imgsize))
 
     if debug:
         image.save('_debug.png')

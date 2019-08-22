@@ -196,10 +196,10 @@ class ResNetV4(nn.Module):
 class ResNetBBoxMask(nn.Module):
     def __init__(self, num_classes,
                  pretrained=False,net_cls=M.resnet50):
-        super(ResNetV5,self).__init__()
+        super(ResNetBBoxMask,self).__init__()
         self.netBBox = create_net(net_cls, pretrained=pretrained)
         self.netBBox.avgpool = AvgPool()
-        self.netBBox.fc = nn.Linear(self.net.fc.in_features, 4)
+        self.netBBox.fc = nn.Linear(self.netBBox.fc.in_features, 4)
 
         self.mask_layer = maskLayer()
 
@@ -226,6 +226,14 @@ class ResNetBBoxMask(nn.Module):
         fc2 = F.leaky_relu(fc2)
         fc3 = self.last_layer(fc2)
         return fc2,fc3,bbox,x_hat
+
+    def fresh_params(self):
+        return self.last_layer.parameters()
+
+    def finetuning(self,num_classes):
+        #only change the last layer
+        self.last_layer = nn.Linear(1024,num_classes)
+
 
 
 class DenseNet(nn.Module):

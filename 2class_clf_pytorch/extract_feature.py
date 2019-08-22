@@ -26,7 +26,7 @@ model_root = '/Users/yefeichen/Desktop/Work/Project/pyTorchClassification/2class
 ckpt = 'model_loss_best.pt'
 model_name = 'resnet50V4'
 
-data_root = '/Users/yefeichen/Database/furniture/collect_from_matterport_chair/'
+data_root = '/Users/yefeichen/Database/furniture/chair_from_digital/'
 N_Cls = 109
 
 model_root = Path(model_root)

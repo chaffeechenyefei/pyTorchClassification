@@ -10,22 +10,23 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import fbeta_score
 from sklearn.exceptions import UndefinedMetricWarning
-
 import torch
 from torch import nn, cuda
 from torch.optim import Adam, SGD
 import tqdm
 import os
 import models.models as models
-from dataset import TrainDataset, TTADataset, get_ids, N_CLASSES,OLD_N_CLASSES, DATA_ROOT,collate_TrainDatasetTriplet,TrainDatasetTriplet
+from dataset import TrainDataset, TTADataset, get_ids, N_CLASSES,OLD_N_CLASSES,collate_TrainDatasetTriplet,TrainDatasetTriplet
 from transforms import train_transform, test_transform
 from utils import (write_event, load_model, load_par_gpu_model_gpu, mean_df, ThreadingDataLoader as DataLoader,
                    ON_KAGGLE)
-from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
+
 from models.utils import *
+from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
 #os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
 
-
+#not used @this version
+DATA_ROOT = '/home/ubuntu/CV/data/furniture'
 #=============================================================================================================================
 #main
 #=============================================================================================================================
@@ -36,7 +37,7 @@ def main():
     arg('--mode', choices=['train', 'validate', 'predict_valid', 'predict_test'], default='train')
     arg('--run_root', default='result/furniture_toy')
     arg('--fold', type=int, default=0)
-    arg('--model', default='resnet50V4')
+    arg('--model', default='ResNetBBoxMask')
     arg('--ckpt', type=str, default='model_loss_best.pt')
     arg('--pretrained', type=str, default='imagenet')#resnet 1, resnext imagenet
     arg('--batch-size', type=int, default=8)
@@ -61,15 +62,11 @@ def main():
     #run_root: model/weights root
     run_root = Path(args.run_root)
     #csv for train/test/validate [id,attribute_id,fold,data]
-    folds = pd.read_csv('train_val_test_chair.csv')
+    folds = pd.read_csv('train_val_test_furniture.csv')
 
     #Not used @this version...
     train_root = DATA_ROOT
     valid_root = DATA_ROOT
-
-    # #Only images in train_sample are used folds = folds[bool vec]
-    # if args.use_sample:
-    #     folds = folds[folds['Id'].isin(set(get_ids(train_root)))]
 
     #split train/valid fold
     train_fold = folds[folds['fold'] == 0]
@@ -81,7 +78,7 @@ def main():
         train_fold = train_fold[:args.limit]
         valid_fold = valid_fold[:args.limit]
 
-    #DataLoader
+    ##::DataLoader
     def make_loader(df: pd.DataFrame, root, image_transform, name='train') -> DataLoader:
         if name == 'train':
             return DataLoader(
@@ -118,8 +115,8 @@ def main():
             num_classes=base_model_class, pretrained='imagenet')
 
 
-    if 'se' not in args.model and 'ception' not in args.model and 'dpn' not in args.model:
-        fresh_params = list(model.fresh_params())
+    # if 'se' not in args.model and 'ception' not in args.model and 'dpn' not in args.model:
+    #     fresh_params = list(model.fresh_params())
 
 
 
@@ -341,7 +338,7 @@ def train(args, model: nn.Module, criterion, *, params,
                 if use_cuda:
                     inputs, targets = inputs.cuda(), targets.cuda()
 
-                feats, outputs= model(inputs)
+                feats, outputs,_,_= model(inputs)
                 outputs = outputs.squeeze()
                 feats = feats.squeeze()
 
@@ -388,6 +385,9 @@ def train(args, model: nn.Module, criterion, *, params,
             return False
     return True
 
+#=============================================================================================================================
+#validation
+#=============================================================================================================================
 def validation(
         model: nn.Module, criterion, valid_loader, use_cuda,
         ) -> Dict[str, float]:
@@ -398,7 +398,7 @@ def validation(
             all_targets.append(targets)#torch@cpu
             if use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
-            _,outputs = model(inputs)#torch@gpu
+            _,outputs,_,_ = model(inputs)#torch@gpu
             # outputs = outputs.squeeze()
             # targets = targets.float()
             # loss = criterion(outputs, targets)
@@ -418,8 +418,8 @@ def validation(
     metrics = {}
     metrics['valid_f1'] = fbeta_score(all_targets, all_predictions, beta=1, average='macro')
     metrics['valid_loss'] = np.mean(all_losses)
-    metrics['valid_top1'] = acc[0].item()    
-    metrics['valid_top5'] = acc[1].item()    
+    metrics['valid_top1'] = acc[0].item()
+    metrics['valid_top5'] = acc[1].item()
     #         all_losses.append(_reduce_loss(loss).item())
     #         predictions = torch.sigmoid(outputs)
     #         all_predictions.append(predictions.cpu().numpy())
@@ -462,3 +462,5 @@ def softmax_lossV2(results,labels):
 
 if __name__ == '__main__':
     main()
+
+
