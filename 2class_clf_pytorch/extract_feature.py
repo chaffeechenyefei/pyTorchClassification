@@ -13,21 +13,32 @@ import cv2
 
 def torch_load_image(patch):
     image = cv2.cvtColor(patch, cv2.COLOR_BGR2RGB)
-    image = cropping(image,ratio=0.9)
-    image = cv2.resize(image ,(256, 256))
+    image = cropping(image, ratio=0.9)
+
+    imgH, imgW, nCh = image.shape
+    nimgW, nimgH = max(imgW, imgH), max(imgW, imgH)
+    offset_W = (nimgW - imgW) // 2
+    offset_H = (nimgH - imgH) // 2
+    nimage = np.zeros((nimgH, nimgW, nCh), dtype=np.uint8)
+    nimage[offset_H:imgH+offset_H, offset_W:imgW+offset_W, :] = 1*image[:,:,:]
+    # image = cv2.resize(nimage ,(imgsize, imgsize))
+    image = cv2.resize(nimage ,(299, 299))
     image = np.transpose(image, (2, 0, 1))
     image = image.astype(np.float32)
-    image = image.reshape([-1, 256, 256])
+    image = image.reshape([-1, 299, 299])
     image = image / 255.0
     return torch.FloatTensor(image)
 
 
-model_root = '/Users/yefeichen/Desktop/Work/Project/pyTorchClassification/2class_clf_pytorch/result/furniture_toy'
+model_root = '/Users/yefeichen/Desktop/Work/Project/pyTorchClassification/2class_clf_pytorch/result/furniture_inception'
 ckpt = 'model_loss_best.pt'
-model_name = 'resnet50V4'
+model_name = 'inception_v4'
 
-data_root = '/Users/yefeichen/Database/furniture/chair_from_digital/'
-N_Cls = 109
+data_root = '/Users/yefeichen/Database/furniture/collect_from_matterport_chair/'
+
+print(data_root)
+# N_Cls = 109
+N_Cls = 253
 
 model_root = Path(model_root)
 

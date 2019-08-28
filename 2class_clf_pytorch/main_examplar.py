@@ -16,7 +16,7 @@ from torch.optim import Adam, SGD
 import tqdm
 import os
 import models.models as models
-from dataset import TrainDataset, TTADataset, get_ids, N_CLASSES,OLD_N_CLASSES, DATA_ROOT,collate_TrainDatasetTriplet,TrainDatasetTriplet
+from dataset import TrainDataset, TTADataset, get_ids,collate_TrainDatasetTriplet,TrainDatasetTriplet
 from transforms import train_transform, test_transform
 from utils import (write_event, load_model, load_par_gpu_model_gpu, mean_df, ThreadingDataLoader as DataLoader,
                    ON_KAGGLE)
@@ -25,7 +25,11 @@ from models.utils import *
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
 #os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
 
+#not used @this version
+DATA_ROOT = '/home/ubuntu/CV/data/furniture'
 
+OLD_N_CLASSES = 128
+N_CLASSES = 253#253#109
 #=============================================================================================================================
 #main
 #=============================================================================================================================
@@ -34,9 +38,9 @@ def main():
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
     arg('--mode', choices=['train', 'validate', 'predict_valid', 'predict_test'], default='train')
-    arg('--run_root', default='result/furniture_toy')
+    arg('--run_root', default='result/furniture_inception')
     arg('--fold', type=int, default=0)
-    arg('--model', default='resnet50V4')
+    arg('--model', default='inception_v4')
     arg('--ckpt', type=str, default='model_loss_best.pt')
     arg('--pretrained', type=str, default='imagenet')#resnet 1, resnext imagenet
     arg('--batch-size', type=int, default=8)
@@ -51,7 +55,7 @@ def main():
     arg('--use-sample', action='store_true', help='use a sample of the dataset')
     arg('--debug', action='store_true')
     arg('--limit', type=int)
-    arg('--imgsize',type=int, default = 256)
+    arg('--imgsize',type=int, default = 299)
     arg('--finetuning',action='store_true')
 
     #cuda version T/F
@@ -61,7 +65,8 @@ def main():
     #run_root: model/weights root
     run_root = Path(args.run_root)
     #csv for train/test/validate [id,attribute_id,fold,data]
-    folds = pd.read_csv('train_val_test_chair.csv')
+    # folds = pd.read_csv('train_val_test_furniture.csv')
+    folds = pd.read_csv('train_val_test_matterport0823.csv')
 
     #Not used @this version...
     train_root = DATA_ROOT
@@ -85,7 +90,7 @@ def main():
     def make_loader(df: pd.DataFrame, root, image_transform, name='train') -> DataLoader:
         if name == 'train':
             return DataLoader(
-                TrainDatasetTriplet(root, df, debug=args.debug, name=name, imgsize = args.imgsize),
+                TrainDatasetTriplet(root, df, debug=args.debug, name=name, imgsize = args.imgsize , class_num=N_CLASSES),
                 shuffle=True,
                 batch_size=args.batch_size,
                 num_workers=args.workers,
@@ -93,7 +98,7 @@ def main():
             )
         else:
             return DataLoader(
-                TrainDataset(root, df, debug=args.debug, name=name, imgsize = args.imgsize),
+                TrainDataset(root, df, debug=args.debug, name=name, imgsize = args.imgsize, class_num=N_CLASSES),
                 shuffle=True,
                 batch_size=args.batch_size,
                 num_workers=args.workers,
@@ -127,6 +132,7 @@ def main():
     if args.finetuning:
         print('Doing finetune initial...')
         load_par_gpu_model_gpu(model, Path(str(run_root) + '/' + 'model_base.initial') )
+        # load_model(model, Path(str(run_root) + '/' + 'model_base.initial'))
         model.finetuning(N_CLASSES)
 
     ##params::Add here
@@ -311,6 +317,14 @@ def train(args, model: nn.Module, criterion, *, params,
         'best_valid_loss': best_valid_loss,
         'best_f1': best_f1
     }, str(model_path))
+
+    save_where = lambda ep,svpath: torch.save({
+        'model': model.state_dict(),
+        'epoch': ep,
+        'step': step,
+        'best_valid_loss': best_valid_loss,
+        'best_f1': best_f1
+    }, str(svpath))
 
     report_each = 100
     log = run_root.joinpath('train.log').open('at', encoding='utf8')

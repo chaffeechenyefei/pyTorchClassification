@@ -301,14 +301,17 @@ class InceptionV4(nn.Module):
         #Allows image of any size to be processed
         adaptiveAvgPoolWidth = features.shape[2]
         x = F.avg_pool2d(features, kernel_size=adaptiveAvgPoolWidth)
-        x = x.view(x.size(0), -1)
-        x = self.last_linear(x)
-        return x
+        feat_triplet = x.view(x.size(0), -1)
+        x = self.last_linear(feat_triplet)
+        return x,feat_triplet
 
     def forward(self, input):
         x = self.features(input)
-        x = self.logits(x)
-        return x
+        x,feat_triplet = self.logits(x)
+        return feat_triplet,x
+
+    def finetuning(self, num_classes):
+        self.last_linear = nn.Linear(1536,num_classes)
 
 
 def inceptionv4(num_classes=1000, pretrained='imagenet'):

@@ -14,8 +14,16 @@ from sklearn.metrics.pairwise import euclidean_distances
 
 def torch_load_image(patch):
     image = cv2.cvtColor(patch, cv2.COLOR_BGR2RGB)
-    image = cropping(image)
-    image = cv2.resize(image ,(256, 256))
+    image = cropping(image, ratio=0.9)
+
+    imgH, imgW, nCh = image.shape
+    nimgW, nimgH = max(imgW, imgH), max(imgW, imgH)
+    offset_W = (nimgW - imgW) // 2
+    offset_H = (nimgH - imgH) // 2
+    nimage = np.zeros((nimgH, nimgW, nCh), dtype=np.uint8)
+    nimage[offset_H:imgH+offset_H, offset_W:imgW+offset_W, :] = 1*image[:,:,:]
+    # image = cv2.resize(nimage ,(imgsize, imgsize))
+    image = cv2.resize(nimage ,(256, 256))
     image = np.transpose(image, (2, 0, 1))
     image = image.astype(np.float32)
     image = image.reshape([-1, 256, 256])
@@ -51,18 +59,16 @@ def cosDist(matA:np.ndarray,matB:np.ndarray):
 
 
 
-
-
-
-
-
-model_root = '/Users/yefeichen/Desktop/Work/Project/pyTorchClassification/2class_clf_pytorch/result/furniture_toy'
+model_root = '/Users/yefeichen/Desktop/Work/Project/pyTorchClassification/2class_clf_pytorch/result/furniture_resnet50'
 ckpt = 'model_loss_best.pt'
 model_name = 'resnet50V4'
 
-data_root = '/Users/yefeichen/Database/furniture/chair_from_digital/'
-test_root = '/Users/yefeichen/Database/furniture/collect_from_matterport_chair/'
-N_Cls = 109
+data_root = '/Users/yefeichen/Database/furniture/collect_from_matterport_all0823/'
+data_root_ext = '.png'
+test_root = '/Users/yefeichen/Database/furniture/chair_from_digital/'
+test_root_ext = '.jpg'
+# N_Cls = 109
+N_Cls = 253
 
 model_root = Path(model_root)
 
@@ -95,7 +101,7 @@ for _file in fileList:
         feat = np.load(npPath).reshape(1,-1)
         featList.append(feat)
         nameSp = os.path.splitext(_file)
-        nameList.append(nameSp[0]+'.jpg')
+        nameList.append(nameSp[0]+data_root_ext)
 
 trFeat = np.vstack(featList)
 
@@ -106,7 +112,7 @@ print('Features loaded from data: ' + str(trFeat.shape) )
 #testing
 testList = os.listdir(test_root)
 for _file in testList:
-    if '.png' in _file: #'_s.jpg'
+    if test_root_ext in _file: #'_s.jpg'
         imgName = _file
         imgPath = os.path.join(test_root,imgName)
         img = cv2.imread(imgPath)

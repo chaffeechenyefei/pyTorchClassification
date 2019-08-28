@@ -5,7 +5,6 @@ import torch
 from models.lovasz import *
 
 import numpy as np
-from dataset import N_CLASSES
 
 ##========================================================================
 ##Basic function

@@ -43,6 +43,38 @@ def create_net(net_cls, pretrained: bool):
     net = net_cls(pretrained=pretrained)
     return net
 
+#===================================================================================================
+#===================================================================================================
+# CNN Toy
+#===================================================================================================
+#===================================================================================================
+class CnnToyNet(nn.Module):
+    def __init__(self, num_classes, img_size=64):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=3, padding=1),
+            nn.MaxPool2d(2, 2),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.MaxPool2d(2, 2),
+            nn.ReLU(),
+            nn.Conv2d(64, 32, kernel_size=1, padding=0),
+        )
+        self._scale = 4
+        self._fc_len = img_size // self._scale * img_size // self._scale * 32
+
+        self.fc1 = nn.Linear(self._fc_len, 128)
+        self.fc2 = nn.Linear(128, num_classes)
+
+    def forward(self, input):
+        x = self.net(input)
+        #         print(x.shape)
+        x = x.view(x.shape[0],-1)
+        feat1 = self.fc1(x)
+        leaky_feat1 = F.leaky_relu(feat1)
+        feat2 = self.fc2(leaky_feat1)
+
+        return feat1, feat2
 
 #===================================================================================================
 #===================================================================================================
@@ -782,6 +814,8 @@ se_resnext50 = partial(se_resnext50_32x4d)
 se_resnext101 = partial(se_resnext101_32x4d)
 se_resnet152 = partial(se_resnet152)
 inception_v4 = partial(inceptionv4)
+
+
 inceptionresnet_v2 = partial(inceptionresnetv2)
 dpn_92 = partial(dpn92)
 dpn_68b = partial(dpn68b)
@@ -799,5 +833,7 @@ densenet121 = partial(DenseNet, net_cls=M.densenet121)
 densenet169 = partial(DenseNet, net_cls=M.densenet169)
 densenet201 = partial(DenseNet, net_cls=M.densenet201)
 densenet161 = partial(DenseNet, net_cls=M.densenet161)
+
+cnntoynet = partial(CnnToyNet)
 
 
