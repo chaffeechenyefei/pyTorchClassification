@@ -12,6 +12,7 @@ import cv2
 
 
 def torch_load_image(patch):
+    HWsize = 299
     image = cv2.cvtColor(patch, cv2.COLOR_BGR2RGB)
     image = cropping(image, ratio=0.9)
 
@@ -22,10 +23,10 @@ def torch_load_image(patch):
     nimage = np.zeros((nimgH, nimgW, nCh), dtype=np.uint8)
     nimage[offset_H:imgH+offset_H, offset_W:imgW+offset_W, :] = 1*image[:,:,:]
     # image = cv2.resize(nimage ,(imgsize, imgsize))
-    image = cv2.resize(nimage ,(299, 299))
+    image = cv2.resize(nimage ,(HWsize, HWsize))
     image = np.transpose(image, (2, 0, 1))
     image = image.astype(np.float32)
-    image = image.reshape([-1, 299, 299])
+    image = image.reshape([-1, HWsize, HWsize])
     image = image / 255.0
     return torch.FloatTensor(image)
 

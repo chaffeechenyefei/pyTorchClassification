@@ -6,7 +6,6 @@ import shutil
 import warnings
 from typing import Dict
 import torch.nn.functional as F
-import numpy as np
 import pandas as pd
 from sklearn.metrics import fbeta_score
 from sklearn.exceptions import UndefinedMetricWarning
@@ -43,7 +42,7 @@ def main():
     arg('--model', default='cnntoynet')
     arg('--ckpt', type=str, default='model_loss_best.pt')
     arg('--pretrained', type=str, default='imagenet')#resnet 1, resnext imagenet
-    arg('--batch-size', type=int, default=8)
+    arg('--batch-size', type=int, default=32)
     arg('--step', type=str, default=8)
     arg('--workers', type=int, default=16)
     arg('--lr', type=float, default=3e-4)
@@ -55,7 +54,7 @@ def main():
     arg('--use-sample', action='store_true', help='use a sample of the dataset')
     arg('--debug', action='store_true')
     arg('--limit', type=int)
-    arg('--imgsize',type=int, default = 64)
+    arg('--imgsize',type=int, default = 256)
     arg('--finetuning',action='store_true')
 
     #cuda version T/F
@@ -66,7 +65,7 @@ def main():
     run_root = Path(args.run_root)
     #csv for train/test/validate [id,attribute_id,fold,data]
     # folds = pd.read_csv('train_val_test_furniture.csv')
-    folds = pd.read_csv('train_val_test_material.csv')
+    folds = pd.read_csv('train_val_test_material_patch.csv')
 
     #Not used @this version...
     train_root = DATA_ROOT
@@ -78,11 +77,13 @@ def main():
 
     #split train/valid fold
     train_fold = folds[folds['fold'] == 0]
+    valid_fold = folds[folds['fold'] == 1]
 
     #limit the size of train/valid data
     #W::Do not use it because the limited size of training data may not contain whole class
     if args.limit:
         train_fold = train_fold[:args.limit]
+        valid_fold = valid_fold[:args.limit]
 
     ##::DataLoader
     def make_loader(df: pd.DataFrame, root, image_transform, name='train') -> DataLoader:
@@ -112,20 +113,22 @@ def main():
     else:
         base_model_class = N_CLASSES
 
-    if 'se' not in args.model and 'ception' not in args.model and 'dpn' not in args.model:
-        # model=> models.py
-        model = getattr(models, args.model)(num_classes = base_model_class,img_size=args.imgsize)
-    else:
-        model = getattr(models, args.model)(
-            num_classes=base_model_class, pretrained='imagenet')
+    model = getattr(models, args.model)(
+        num_classes = base_model_class, img_size=args.imgsize)
 
+    #finetune::load model with old settings first and then change the last layer for new task!
+    if args.finetuning:
+        print('Doing finetune initial...')
+        #load_par_gpu_model_gpu(model, Path(str(run_root) + '/' + 'model_base.initial') )
+        load_model(model, Path(str(run_root) + '/' + 'model_base.initial'))
+        model.finetuning(N_CLASSES)
 
     ##params::Add here
     #params list[models.parameters()]
     all_params = list(model.parameters())
 
     #apply parallel gpu if available
-    # model = torch.nn.DataParallel(model)
+    #model = torch.nn.DataParallel(model)
 
     #gpu first
     if use_cuda:
@@ -140,15 +143,17 @@ def main():
             json.dumps(vars(args), indent=4, sort_keys=True))
 
         train_loader = make_loader(train_fold, train_root, train_transform, name='train')
+        valid_loader = make_loader(valid_fold, valid_root, test_transform, name='valid')
 
-        print(f'{len(train_loader.dataset):,} items in train' )
+        print(f'{len(train_loader.dataset):,} items in train, '
+              f'{len(valid_loader.dataset):,} in valid')
 
         train_kwargs = dict(
             args=args,
             model=model,
             criterion=criterion,
             train_loader=train_loader,
-            valid_loader=None,
+            valid_loader=valid_loader,
             patience=args.patience,
             init_optimizer=lambda params, lr: Adam(params, lr, betas=(0.9,0.999), eps=1e-08, weight_decay = 2e-4),
             use_cuda=use_cuda,
@@ -209,7 +214,7 @@ def train(args, model: nn.Module, criterion, *, params,
     run_root = Path(args.run_root)
 
     model_path = Path(str(run_root) + '/' + 'model.pt')
-    model_path_interupt = Path(str(run_root) + '/' + 'model_interupt.pt')
+    model_interupt_path = Path(str(run_root) + '/' + 'model_interupt.pt')
 
     if model_path.exists():
         state = load_model(model, model_path)
@@ -242,7 +247,6 @@ def train(args, model: nn.Module, criterion, *, params,
         'best_f1': best_f1
     }, str(svpath))
 
-
     report_each = 100
     log = run_root.joinpath('train.log').open('at', encoding='utf8')
     valid_losses = []
@@ -259,34 +263,27 @@ def train(args, model: nn.Module, criterion, *, params,
             lr = lr * 0.9
             optimizer = init_optimizer(params, lr)
             print(f'lr updated to {lr}')
-        else:
-            print('current lr:' + str(lr))
-
 
         tq.set_description(f'Epoch {epoch}, lr {lr}')
         losses = []
         tl = train_loader
-
+        if args.epoch_size:
+            tl = islice(tl, args.epoch_size // args.batch_size)
         try:
             mean_loss = 0
 
             for i, (inputs, targets) in enumerate(tl):#enumerate() turns tl into index, ele_of_tl
-                # print('1')
-
                 if use_cuda:
                     inputs, targets = inputs.cuda(), targets.cuda()
-
-                # print('2')
 
                 feats, outputs= model(inputs)
                 outputs = outputs.squeeze()
                 feats = feats.squeeze()
 
-                # print('3')
-
                 loss1 = softmax_loss(outputs, targets)
+                loss2 = TripletLossV1(margin=0.5)(feats,targets)
 
-                loss = loss1
+                loss = 0.25*loss1 + 0.75*loss2
 
                 batch_size = inputs.size(0)
 
@@ -307,12 +304,21 @@ def train(args, model: nn.Module, criterion, *, params,
             tq.close()
             print('saving')
             save(epoch + 1)
+            print('validation')
+            valid_metrics = validation(model, criterion, valid_loader, use_cuda)
+            write_event(log, step, **valid_metrics)
+            valid_loss = valid_metrics['valid_loss']
+            valid_losses.append(valid_loss)
+
+            if valid_loss < best_valid_loss:
+                best_valid_loss = valid_loss
+                shutil.copy(str(model_path), str(run_root) + '/model_loss_best.pt')
 
         except KeyboardInterrupt:
             tq.close()
             print('Ctrl+C, saving snapshot')
-            save_where(epoch,model_path_interupt)
-            print('interupt done.')
+            save_where(epoch,model_interupt_path)
+            print('done.')
 
             return False
     return True

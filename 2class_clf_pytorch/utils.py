@@ -25,8 +25,9 @@ def mean_df(df: pd.DataFrame) -> pd.DataFrame:
     return df.groupby(level=0).mean()
 
 
-def load_model(model: nn.Module, path: Path) -> Dict:
-    state = torch.load(str(path),)
+def load_model(model: nn.Module, path: Path , loc = 'cpu') -> Dict:
+    device = torch.device(loc)
+    state = torch.load(str(path),map_location=device)
     model.load_state_dict(state['model'])
     print('Loaded model from epoch {epoch}, step {step:,}'.format(**state))
     return state

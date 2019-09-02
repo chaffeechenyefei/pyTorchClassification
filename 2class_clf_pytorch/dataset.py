@@ -12,6 +12,7 @@ from torchvision.transforms import (
     RandomHorizontalFlip)
 from transforms import tensor_transform
 from aug import *
+from transforms import iaaTransform
 
 
 # image_size = 256
@@ -32,7 +33,8 @@ class TrainDataset(Dataset):
     def __getitem__(self, idx: int):
         _idx = idx
         item = self._df.iloc[_idx]
-        image = load_transform_image(item, self._root, imgsize = self._imgsize,debug=self._debug, name=self._name)
+        # image = load_transform_image(item, self._root, imgsize = self._imgsize,debug=self._debug, name=self._name)
+        image = load_transform_image_iaa(item, self._root, imgsize = self._imgsize,debug=self._debug, name=self._name)
         # target = torch.zeros(N_CLASSES)
         lb = item.attribute_ids
         # print(lb)
@@ -58,8 +60,8 @@ class TrainDatasetTriplet(Dataset):
         self._class_num = class_num
 
     def __len__(self):#how much times will each epoch sample
-        # return min(max(len(self._df),20000),40000)
-        return 5000
+        return min(max(len(self._df),20000),40000)
+        # return self._class_num*125
 
     @staticmethod
     def tbatch():
@@ -88,7 +90,7 @@ class TrainDatasetTriplet(Dataset):
         for idxA in pair_idxA:
             # print('dsx')
             item = dfA.iloc[idxA]
-            image = load_transform_image(item, self._root, imgsize=self._imgsize, debug=self._debug,
+            image = load_transform_image_iaa(item, self._root, imgsize=self._imgsize, debug=self._debug,
                                          name=self._name)
             # print('load done')
             lb = int(item.attribute_ids)
@@ -103,7 +105,7 @@ class TrainDatasetTriplet(Dataset):
 
         for idxB in pair_idxB:
             item = dfB.iloc[idxB]
-            image = load_transform_image(item, self._root, imgsize=self._imgsize, debug=self._debug,
+            image = load_transform_image_iaa(item, self._root, imgsize=self._imgsize, debug=self._debug,
                                          name=self._name)
             images.append(image)
             lb = int(item.attribute_ids)
@@ -322,3 +324,39 @@ def load_image(item, root: Path) -> Image.Image:
 def get_ids(root: Path) -> List[str]:
     return sorted({p.name.split('_')[0] for p in root.glob('*.jpg')})
 
+
+
+iaa_transformer = iaaTransform()
+iaa_transformer.getSeq()
+def load_transform_image_iaa(item, root: Path, imgsize=256,debug: bool = False, name: str = 'train'):
+    image = load_image(item, root)
+
+    if name == 'train':
+        alpha = random.uniform(0, 0.2)
+        image = do_brightness_shift(image, alpha=alpha)
+        image = random_flip(image, p=0.5)
+        angle = random.uniform(0, 1)*360
+        image = rotate(image, angle, center=None, scale=1.0)
+        image_aug = iaa_transformer.act(image)
+    else:
+        image_aug = random_cropping(image, ratio=0.8, is_random=False)
+
+    image = cv2.resize(image_aug, (imgsize, imgsize))
+
+    if debug:
+        image.save('_debug.png')
+
+    image = np.transpose(image, (2, 0, 1))
+    image = image.astype(np.float32)
+    image = image.reshape([-1, imgsize, imgsize])
+    image = image / 255.0
+
+    # is_venn = True
+    # if is_venn:
+    #     # mean = [0.485, 0.456, 0.406]
+    #     # std = [0.229, 0.224, 0.225]
+    #     image[0,:,:] = (image[0,:,:] - 0.485) / 0.229
+    #     image[1,:,:] = (image[1,:,:] - 0.456) / 0.224
+    #     image[2,:,:] = (image[2,:,:] - 0.406) / 0.225
+
+    return torch.FloatTensor(image)

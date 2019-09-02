@@ -54,13 +54,15 @@ class CnnToyNet(nn.Module):
         self.net = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=3, padding=1),
             nn.MaxPool2d(2, 2),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Conv2d(64, 64, kernel_size=3, padding=1),
             nn.MaxPool2d(2, 2),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Conv2d(64, 32, kernel_size=1, padding=0),
+            nn.LeakyReLU(),
+            nn.AvgPool2d(3,2,1)
         )
-        self._scale = 4
+        self._scale = 8
         self._fc_len = img_size // self._scale * img_size // self._scale * 32
 
         self.fc1 = nn.Linear(self._fc_len, 128)

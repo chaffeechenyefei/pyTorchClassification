@@ -6,6 +6,8 @@ from torchvision.transforms import (
     ToTensor, Normalize, Compose, Resize, CenterCrop, RandomCrop,
     RandomHorizontalFlip, RandomVerticalFlip)
 from  torchvision.transforms import functional
+import imgaug.augmenters as iaa
+import imgaug as ia
 
 
 
@@ -124,3 +126,30 @@ tensor_transform = Compose([
     ToTensor(),
     Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
+
+
+class iaaTransform(object):
+    def __int__(self):
+        self.sometimes = None
+        self.seq = None
+
+    def getSeq(self):
+        self.sometimes = lambda aug: iaa.Sometimes(0.5, aug)
+        self.seq = iaa.Sequential(
+            [
+                # iaa.Add((-5, 5), per_channel=0.5),
+                iaa.GaussianBlur((0, 3.0)),
+                iaa.AddToHueAndSaturation((-10, 10)),
+                # self.sometimes(iaa.PiecewiseAffine(scale=(0.01, 0.05))),
+                # self.sometimes(iaa.PerspectiveTransform(scale=(0.01, 0.1))),
+                # iaa.ContrastNormalization((0.8, 1.2), per_channel=0.5),
+            ],
+            random_order=True
+        )
+
+    def act(self,img):
+        image_aug = self.seq.augment_image(img)
+        return image_aug
+
+
+
