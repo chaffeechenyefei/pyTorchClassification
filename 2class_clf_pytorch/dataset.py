@@ -17,6 +17,9 @@ from transforms import iaaTransform
 
 # image_size = 256
 
+iaa_transformer = iaaTransform()
+iaa_transformer.getSeq()
+
 class TrainDataset(Dataset):
     def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize = 256 , class_num = -1):
         super().__init__()
@@ -137,6 +140,100 @@ def collate_TrainDatasetTriplet(batch):
     labels = torch.from_numpy(np.array(labels))
     return images, labels
 
+class TrainDatasetTripletBatchAug(Dataset):
+    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256, class_num = -1):
+        super().__init__()
+        self._root = root
+        self._df = df
+        self._debug = debug
+        self._name = name
+        self._imgsize = imgsize
+        self._class_num = class_num
+
+    def __len__(self):#how much times will each epoch sample
+        return min(max(len(self._df),20000),40000)
+        # return self._class_num*125
+
+    @staticmethod
+    def tbatch():
+        return 8
+
+    def __getitem__(self, idx: int):
+        # choose label from data a
+        # choose any tow sample from data b bcz 1 image per class
+        labelA = int(idx % self._class_num)
+
+        dfA = self._df[self._df['attribute_ids'] == labelA]
+        while dfA.empty:
+            labelA = random.randint(0,self._class_num-1)
+            dfA = self._df[self._df['attribute_ids'] == labelA]
+
+        len_dfA = len(dfA)
+        assert(len_dfA!=0)
+        pair_idxA = [random.randint(0, len_dfA - 1) for _ in range(4)]#有重采样
+
+        images = []
+        targets = []
+
+        #pos
+        for idxA in pair_idxA:
+            # print('dsx')
+            item = dfA.iloc[idxA]
+            image = load_image_uint8(item, self._root, imgsize=self._imgsize, debug=self._debug,
+                                         name=self._name)
+            # print('load done')
+            lb = int(item.attribute_ids)
+            assert (lb < self._class_num)
+            images.append(image)
+            targets.append(lb)
+
+        #neg
+        dfB = self._df[self._df['attribute_ids'] != labelA]
+        len_dfB = len(dfB)
+        pair_idxB = [random.randint(0, len_dfB - 1) for _ in range(4)]#有重采样
+
+        for idxB in pair_idxB:
+            item = dfB.iloc[idxB]
+            image = load_image_uint8(item, self._root, imgsize=self._imgsize, debug=self._debug,
+                                         name=self._name)
+            images.append(image)
+            lb = int(item.attribute_ids)
+            targets.append(lb)
+
+
+        #IAA Batch Operations
+        images = np.stack(images,0)
+
+        #images = [B,H,W,C]
+        images = iaa_transformer.act_batch(images)
+        images = np.transpose(images, (0, 3, 1, 2)) #[B,H,W,C] -> [B,C,H,W]
+        images = images.astype(np.float32)
+        images = images / 255.0
+
+        return torch.FloatTensor(images), targets
+
+
+def collate_TrainDatasetTripletBatchAug(batch):
+    """
+    special collate_fn function for UDF class TrainDatasetTriplet
+    :param batch: 
+    :return: 
+    """
+    # batch_size = len(batch)
+    images = []
+    labels = []
+
+    for b in batch:
+        if b[0] is None:
+            continue
+        else:
+            images.extend(b[0])
+            labels.extend(b[1])
+
+    images = torch.stack(images, 0)  # images : list of [C,H,W] -> [Len_of_list, C, H,W]
+    labels = torch.from_numpy(np.array(labels))
+    assert (images.shape[0] == labels.shape[0])
+    return images, labels
 
 # #item \
 # # - attribute_ids - id - folds - data: a,b
@@ -326,8 +423,7 @@ def get_ids(root: Path) -> List[str]:
 
 
 
-iaa_transformer = iaaTransform()
-iaa_transformer.getSeq()
+
 def load_transform_image_iaa(item, root: Path, imgsize=256,debug: bool = False, name: str = 'train'):
     image = load_image(item, root)
 
@@ -360,3 +456,36 @@ def load_transform_image_iaa(item, root: Path, imgsize=256,debug: bool = False, 
     #     image[2,:,:] = (image[2,:,:] - 0.406) / 0.225
 
     return torch.FloatTensor(image)
+
+def load_image_uint8(item, root: Path, imgsize=256,debug: bool = False, name: str = 'train'):
+    image = load_image(item, root)
+
+    if name == 'train':
+        alpha = random.uniform(0, 0.2)
+        image = do_brightness_shift(image, alpha=alpha)
+        image = random_flip(image, p=0.5)
+        angle = random.uniform(0, 1)*360
+        image_aug = rotate(image, angle, center=None, scale=1.0)
+    else:
+        image_aug = random_cropping(image, ratio=0.8, is_random=False)
+
+    image = cv2.resize(image_aug, (imgsize, imgsize))
+
+    if debug:
+        image.save('_debug.png')
+
+    # image = np.transpose(image, (2, 0, 1))
+    # image = image.astype(np.float32)
+    # image = image.reshape([-1, imgsize, imgsize])
+    # image = image / 255.0
+
+    # is_venn = True
+    # if is_venn:
+    #     # mean = [0.485, 0.456, 0.406]
+    #     # std = [0.229, 0.224, 0.225]
+    #     image[0,:,:] = (image[0,:,:] - 0.485) / 0.229
+    #     image[1,:,:] = (image[1,:,:] - 0.456) / 0.224
+    #     image[2,:,:] = (image[2,:,:] - 0.406) / 0.225
+
+    return image
+

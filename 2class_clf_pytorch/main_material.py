@@ -15,9 +15,9 @@ from torch.optim import Adam, SGD
 import tqdm
 import os
 import models.models as models
-from dataset import TrainDataset, TTADataset, get_ids,collate_TrainDatasetTriplet,TrainDatasetTriplet
+from dataset import TrainDataset, TTADataset, get_ids,collate_TrainDatasetTripletBatchAug,TrainDatasetTripletBatchAug
 from transforms import train_transform, test_transform
-from utils import (write_event, load_model, load_par_gpu_model_gpu, mean_df, ThreadingDataLoader as DataLoader,
+from utils import (write_event, load_model, load_par_gpu_model_gpu, mean_df, ThreadingDataLoader as DataLoader, adjust_learning_rate,
                    ON_KAGGLE)
 
 from models.utils import *
@@ -89,11 +89,11 @@ def main():
     def make_loader(df: pd.DataFrame, root, image_transform, name='train') -> DataLoader:
         if name == 'train':
             return DataLoader(
-                TrainDatasetTriplet(root, df, debug=args.debug, name=name, imgsize = args.imgsize , class_num=N_CLASSES),
+                TrainDatasetTripletBatchAug(root, df, debug=args.debug, name=name, imgsize = args.imgsize , class_num=N_CLASSES),
                 shuffle=True,
                 batch_size=args.batch_size,
                 num_workers=args.workers,
-                collate_fn= collate_TrainDatasetTriplet
+                collate_fn= collate_TrainDatasetTripletBatchAug
             )
         else:
             return DataLoader(
@@ -257,11 +257,11 @@ def train(args, model: nn.Module, criterion, *, params,
     for epoch in range(epoch, n_epochs + 1):
         model.train()
         tq = tqdm.tqdm(total=(args.epoch_size or
-                              TrainDatasetTriplet.tbatch()*len(train_loader) * args.batch_size))
+                              TrainDatasetTripletBatchAug.tbatch()*len(train_loader) * args.batch_size))
 
         if epoch >= 10:
             lr = lr * 0.9
-            optimizer = init_optimizer(params, lr)
+            adjust_learning_rate(optimizer, lr)
             print(f'lr updated to {lr}')
 
         tq.set_description(f'Epoch {epoch}, lr {lr}')

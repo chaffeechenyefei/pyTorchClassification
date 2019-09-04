@@ -18,7 +18,7 @@ import os
 import models.models as models
 from dataset import TrainDataset, TTADataset, get_ids,collate_TrainDatasetTriplet,TrainDatasetTriplet
 from transforms import train_transform, test_transform
-from utils import (write_event, load_model, load_par_gpu_model_gpu, mean_df, ThreadingDataLoader as DataLoader,
+from utils import (write_event, load_model, load_par_gpu_model_gpu, mean_df, ThreadingDataLoader as DataLoader, adjust_learning_rate,
                    ON_KAGGLE)
 
 from models.utils import *
@@ -340,7 +340,7 @@ def train(args, model: nn.Module, criterion, *, params,
 
         if epoch >= 10:
             lr = lr * 0.9
-            optimizer = init_optimizer(params, lr)
+            adjust_learning_rate(optimizer, lr)
             print(f'lr updated to {lr}')
 
         tq.set_description(f'Epoch {epoch}, lr {lr}')

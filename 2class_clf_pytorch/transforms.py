@@ -139,9 +139,9 @@ class iaaTransform(object):
             [
                 # iaa.Add((-5, 5), per_channel=0.5),
                 iaa.GaussianBlur((0, 3.0)),
-                iaa.AddToHueAndSaturation((-10, 10)),
+                iaa.AddToHueAndSaturation((-5, 5)),
                 # self.sometimes(iaa.PiecewiseAffine(scale=(0.01, 0.05))),
-                # self.sometimes(iaa.PerspectiveTransform(scale=(0.01, 0.1))),
+                self.sometimes(iaa.PerspectiveTransform(scale=(0.01, 0.1))),
                 # iaa.ContrastNormalization((0.8, 1.2), per_channel=0.5),
             ],
             random_order=True
@@ -150,6 +150,13 @@ class iaaTransform(object):
     def act(self,img):
         image_aug = self.seq.augment_image(img)
         return image_aug
+
+    def act_batch(self,batch):
+        assert(batch.shape[3]<=3)
+        batch_aug = self.seq.augment_images(batch)
+        return batch_aug
+
+
 
 
 
