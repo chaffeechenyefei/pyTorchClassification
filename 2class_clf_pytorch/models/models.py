@@ -16,6 +16,7 @@ from .dpn import *
 from .maskLayer import maskLayer
 
 from models.dictLayer import DictLayer
+from models.netvlad import NetVladLayer
 
 __all__ = ['SENet', 'senet154', 'se_resnet50', 'se_resnet101', 'se_resnet152',
            'se_resnext50_32x4d', 'se_resnext101_32x4d']
@@ -78,6 +79,39 @@ class CnnToyNet(nn.Module):
 
         return feat1, feat2
 
+
+# ===================================================================================================
+# ===================================================================================================
+# CNN Toy + vlad
+# ===================================================================================================
+# ===================================================================================================
+class CnnVladToyNet(nn.Module):
+    def __init__(self, num_classes, img_size=64):
+        super().__init__()
+        last_conv_ch = 32
+        self.net = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=3, padding=1),
+            nn.MaxPool2d(2, 2),
+            nn.LeakyReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.MaxPool2d(2, 2),
+            nn.LeakyReLU(),
+            nn.Conv2d(64, last_conv_ch, kernel_size=1, padding=0),
+            nn.LeakyReLU(),
+            nn.AvgPool2d(3, 2, 1)
+        )
+        self._scale = 8
+        # self._fc_len = img_size // self._scale * img_size // self._scale * 32
+
+        self.vlad = NetVladLayer(input_channels=last_conv_ch,centers_num=32)
+        self.fc2 = nn.Linear(self.vlad.output_features, num_classes)
+
+    def forward(self, input):
+        x = self.net(input)
+        feat1 = self.vlad(x)
+        feat2 = self.fc2(feat1)
+
+        return feat1, feat2
 #===================================================================================================
 #===================================================================================================
 # ResNet and DenseNet
@@ -223,6 +257,42 @@ class ResNetV4(nn.Module):
         #only change the last layer
         self.last_layer = nn.Linear(1024,num_classes)
 
+# model.classifier = nn.Sequential(*[model.classifier[i] for i in range(4)])
+# print(model.classifier)
+# model.classifier = nn.Sequential(*list(model.classifier.children())[:-3])
+class ResNetVlad(nn.Module):
+    def __init__(self, num_classes,
+                 pretrained=False, net_cls=M.resnet50, dropout=False, centerK = 32):
+        super(ResNetVlad, self).__init__()
+        self.net = create_net(net_cls, pretrained=pretrained)
+        self.net = nn.Sequential(*list(self.net.children())[:-2]) #get rid of last 2 layer, and conv is last layer
+
+        self.conv = nn.Conv2d(512,64,(1,1))
+        self.netvlad = NetVladLayer(64,centers_num=centerK)
+        self.netvladlen = self.netvlad.output_features
+        self.last_layer = nn.Linear(self.netvladlen,num_classes)
+
+    # freeze param
+    def freeze(self):
+        for param in self.net.parameters():
+            param.requires_grad = False
+
+    def fresh_params(self):
+        return list(self.netvlad.parameters(),self.net.last_layer.parameters())
+
+    def forward(self, x):
+        fc1 = self.net(x)
+        fc1 = self.conv(fc1)
+        fc1 = F.leaky_relu(fc1)
+
+        netvladfeat = self.netvlad(fc1)
+
+        clsfeat = self.last_layer(netvladfeat)
+        return netvladfeat, clsfeat
+
+    def finetuning(self, num_classes):
+        # only change the last layer
+        self.last_layer = nn.Linear(self.netvladlen, num_classes)
 
 ##======================================================================================================================
 ##ResNet50 + BBox from Alibaba Image Search
@@ -823,6 +893,7 @@ dpn_92 = partial(dpn92)
 dpn_68b = partial(dpn68b)
 
 resnet18 = partial(ResNet, net_cls=M.resnet18)
+resnetvlad18 = partial(ResNetVlad,net_cls=M.resnet18)
 resnet34 = partial(ResNet, net_cls=M.resnet34)
 resnet50 = partial(ResNet, net_cls=M.resnet50)
 resnet50V2 = partial(ResNetV2, net_cls=M.resnet50)
@@ -837,5 +908,5 @@ densenet201 = partial(DenseNet, net_cls=M.densenet201)
 densenet161 = partial(DenseNet, net_cls=M.densenet161)
 
 cnntoynet = partial(CnnToyNet)
-
+cnnvladtoynet = partial(CnnVladToyNet)
 

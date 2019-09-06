@@ -39,10 +39,10 @@ def main():
     arg('--mode', choices=['train', 'validate', 'predict_valid', 'predict_test'], default='train')
     arg('--run_root', default='result/material_toy')
     arg('--fold', type=int, default=0)
-    arg('--model', default='cnntoynet')
+    arg('--model', default='resnetvlad18')
     arg('--ckpt', type=str, default='model_loss_best.pt')
     arg('--pretrained', type=str, default='imagenet')#resnet 1, resnext imagenet
-    arg('--batch-size', type=int, default=32)
+    arg('--batch-size', type=int, default=16)
     arg('--step', type=str, default=8)
     arg('--workers', type=int, default=16)
     arg('--lr', type=float, default=3e-4)
@@ -114,7 +114,7 @@ def main():
         base_model_class = N_CLASSES
 
     model = getattr(models, args.model)(
-        num_classes = base_model_class, img_size=args.imgsize)
+        num_classes = base_model_class)
 
     #finetune::load model with old settings first and then change the last layer for new task!
     if args.finetuning:
@@ -125,7 +125,8 @@ def main():
 
     ##params::Add here
     #params list[models.parameters()]
-    all_params = list(model.parameters())
+    # all_params = list(model.parameters())
+    all_params = filter(lambda p: p.requires_grad, model.parameters())
 
     #apply parallel gpu if available
     #model = torch.nn.DataParallel(model)
@@ -148,6 +149,8 @@ def main():
         print(f'{len(train_loader.dataset):,} items in train, '
               f'{len(valid_loader.dataset):,} in valid')
 
+
+
         train_kwargs = dict(
             args=args,
             model=model,
@@ -155,7 +158,7 @@ def main():
             train_loader=train_loader,
             valid_loader=valid_loader,
             patience=args.patience,
-            init_optimizer=lambda params, lr: Adam(params, lr, betas=(0.9,0.999), eps=1e-08, weight_decay = 2e-4),
+            init_optimizer=lambda params, lr: Adam( params, lr, betas=(0.9,0.999), eps=1e-08, weight_decay = 2e-4),
             use_cuda=use_cuda,
         )
 
