@@ -886,6 +886,8 @@ se_resnext50 = partial(se_resnext50_32x4d)
 se_resnext101 = partial(se_resnext101_32x4d)
 se_resnet152 = partial(se_resnet152)
 inception_v4 = partial(inceptionv4)
+inception_v4_netvlad = partial(inceptionv4_netvlad)
+inception_v4_attention = partial(inceptionv4_attention)
 
 
 inceptionresnet_v2 = partial(inceptionresnetv2)
@@ -894,6 +896,7 @@ dpn_68b = partial(dpn68b)
 
 resnet18 = partial(ResNet, net_cls=M.resnet18)
 resnetvlad18 = partial(ResNetVlad,net_cls=M.resnet18)
+resnet18V4 = partial(ResNetV4, net_cls=M.resnet18)
 resnet34 = partial(ResNet, net_cls=M.resnet34)
 resnet50 = partial(ResNet, net_cls=M.resnet50)
 resnet50V2 = partial(ResNetV2, net_cls=M.resnet50)

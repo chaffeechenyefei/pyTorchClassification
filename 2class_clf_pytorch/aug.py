@@ -11,6 +11,109 @@ import numpy as np
 import random
 import skimage
 import math
+import pandas as pd
+
+
+#=======================================================================================================================
+#Adding Backgrounds
+#=======================================================================================================================
+df_rle = pd.read_csv('/home/ubuntu/dataset/furniture/rles.csv')
+df_rle.index = df_rle['Id']
+del df_rle['Id']
+flick_path = '/home/ubuntu/dataset/furniture/flickr30k_images/flickr30k_images/'
+flick_list = os.listdir(flick_path)
+flick_list = [l for l in flick_list if 'jpg' in l]
+flick_len = len(flick_list)
+
+
+def do_length_decode(rle, H, W, fill_value=255):
+    mask = np.zeros((H,W), np.uint8)
+    if type(rle).__name__ == 'float': return mask
+
+    mask = mask.reshape(-1)
+
+    rle = np.array([int(s) for s in rle.split(' ')]).reshape(-1, 2)
+
+    for r in rle:
+        start = r[0]-1
+        end = start + r[1]
+        mask[start : end] = fill_value
+    mask = mask.reshape(W, H).T   # H, W need to swap as transposing.
+    return mask
+
+def do_length_encode(x):
+    bs = np.where(x.T.flatten())[0]
+
+    rle = []
+    prev = -2
+    for b in bs:
+        if (b>prev+1): rle.extend((b + 1, 0))
+        rle[-1] += 1
+        prev = b
+
+    rle = ' '.join([str(r) for r in rle])
+    return rle
+
+
+def output_add_bg_img(rle, img, bg):
+    bg_h, bg_w, _ = bg.shape
+    bg = cv2.resize(bg, (min(bg_w, bg_h), min(bg_w, bg_h)))
+    bg_h, bg_w, _ = bg.shape
+    h, w, _ = img.shape
+    mask = do_length_decode(rle, h, w, fill_value=255)
+    mask = np.where(mask > 0, 0, 1)
+
+    img_no_bg = (mask.reshape(h, w, 1) * img).astype('uint8')
+
+    resize_scale = random.uniform(0.8, 1) * bg_h
+    if w < h:
+        new_h = int(resize_scale)
+        new_w = int(resize_scale * w / h)
+    else:
+        new_w = int(resize_scale)
+        new_h = int(resize_scale * h / w)
+    img_no_bg_cp = cv2.resize(img_no_bg, (new_w, new_h))
+    alpha = np.where(img_no_bg_cp > 0, 1, 0)
+
+    start_x = random.randint(0, bg_w - new_w)
+    start_y = random.randint(0, bg_h - new_h)
+
+    bg[start_y:start_y + new_h, start_x:start_x + new_w, :] = \
+        bg[start_y:start_y + new_h, start_x:start_x + new_w, :] * (1 - alpha) + \
+        img_no_bg_cp
+    bg = cv2.medianBlur(bg, 5)
+    return bg
+
+
+def rand_bg_resize_crop(image,image_id,imgsize=(256,256)):
+    if random.uniform(0, 1) > 0.9:
+        if random.uniform(0, 1) > 0.1:
+            ratio = random.uniform(0.6, 0.99)
+            image = cv2.resize(image, imgsize)
+            image = random_cropping(image, ratio=ratio, is_random=True)
+    else:
+        rle = df_rle.loc[image_id].values[0]
+        if random.uniform(0, 1) > 0.5:
+            bg_num = random.randint(0, 48)
+            bg = cv2.imread('/home/ubuntu/dataset/furniture/background/' + str(bg_num) + '_bg.png')
+        else:
+            bg_num = random.randint(0, flick_len - 1)
+            bg = cv2.imread(flick_path + flick_list[bg_num])
+
+        image = output_add_bg_img(rle, image, bg)
+        image = cv2.resize(image, imgsize)
+
+        if random.uniform(0, 1) > 0.1:
+            ratio = random.uniform(0.8, 0.99)
+            image = random_cropping(image, ratio=ratio, is_random=True)
+
+
+    image = cv2.resize(image,imgsize)
+    return image
+#=======================================================================================================================
+#Adding Backgrounds Ends
+#=======================================================================================================================
+
 
 class RandomErasing(object):
 

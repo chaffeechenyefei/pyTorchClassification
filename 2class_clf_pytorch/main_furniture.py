@@ -16,9 +16,9 @@ from torch.optim import Adam, SGD
 import tqdm
 import os
 import models.models as models
-from dataset import TrainDataset, TTADataset, get_ids,collate_TrainDatasetTriplet,TrainDatasetTriplet
+from dataset import TrainDataset, TTADataset, get_ids,TrainDatasetTripletBatchAug_BG,collate_TrainDatasetTripletBatchAug_BG
 from transforms import train_transform, test_transform
-from utils import (write_event, load_model, load_par_gpu_model_gpu, mean_df, ThreadingDataLoader as DataLoader, adjust_learning_rate,
+from utils import (write_event, load_model, load_model_ex_inceptionv4, load_par_gpu_model_gpu, mean_df, ThreadingDataLoader as DataLoader, adjust_learning_rate,
                    ON_KAGGLE)
 
 from models.utils import *
@@ -26,10 +26,12 @@ from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_sco
 #os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
 
 #not used @this version
-DATA_ROOT = '/home/ubuntu/CV/data/furniture'
+TR_DATA_ROOT = '/home/ubuntu/dataset/furniture/FFE_render_train_all/'
+# TT_DATA_ROOT = '/home/ubuntu/dataset/furniture/FFE_render_train_all'
+TT_DATA_ROOT = '/home/ubuntu/dataset/furniture/matched_matt_new/'
 
-OLD_N_CLASSES = 128
-N_CLASSES = 253#253#109
+OLD_N_CLASSES = 26
+N_CLASSES = 26#253#109
 #=============================================================================================================================
 #main
 #=============================================================================================================================
@@ -38,9 +40,9 @@ def main():
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
     arg('--mode', choices=['train', 'validate', 'predict_valid', 'predict_test'], default='train')
-    arg('--run_root', default='result/furniture_inception')
+    arg('--run_root', default='result/furniture_render_inception')
     arg('--fold', type=int, default=0)
-    arg('--model', default='inception_v4')
+    arg('--model', default='inception_v4_netvlad')
     arg('--ckpt', type=str, default='model_loss_best.pt')
     arg('--pretrained', type=str, default='imagenet')#resnet 1, resnext imagenet
     arg('--batch-size', type=int, default=8)
@@ -49,13 +51,13 @@ def main():
     arg('--lr', type=float, default=3e-4)
     arg('--patience', type=int, default=4)
     arg('--clean', action='store_true')
-    arg('--n-epochs', type=int, default=60)
+    arg('--n-epochs', type=int, default=120)
     arg('--epoch-size', type=int)
     arg('--tta', type=int, default=1)
     arg('--use-sample', action='store_true', help='use a sample of the dataset')
     arg('--debug', action='store_true')
     arg('--limit', type=int)
-    arg('--imgsize',type=int, default = 299)
+    arg('--imgsize',type=int, default = 256)
     arg('--finetuning',action='store_true')
 
     #cuda version T/F
@@ -66,19 +68,15 @@ def main():
     run_root = Path(args.run_root)
     #csv for train/test/validate [id,attribute_id,fold,data]
     # folds = pd.read_csv('train_val_test_furniture.csv')
-    folds = pd.read_csv('train_val_test_matterport0823.csv')
+    folds = pd.read_csv('train_val_test_render.csv')
 
     #Not used @this version...
-    train_root = DATA_ROOT
-    valid_root = DATA_ROOT
-
-    # #Only images in train_sample are used folds = folds[bool vec]
-    # if args.use_sample:
-    #     folds = folds[folds['Id'].isin(set(get_ids(train_root)))]
+    train_root = TR_DATA_ROOT
+    valid_root = TT_DATA_ROOT
 
     #split train/valid fold
     train_fold = folds[folds['fold'] == 0]
-    valid_fold = folds[folds['fold'] == 1]
+    valid_fold = folds[folds['fold'] == 2]
 
     #limit the size of train/valid data
     #W::Do not use it because the limited size of training data may not contain whole class
@@ -90,11 +88,11 @@ def main():
     def make_loader(df: pd.DataFrame, root, image_transform, name='train') -> DataLoader:
         if name == 'train':
             return DataLoader(
-                TrainDatasetTriplet(root, df, debug=args.debug, name=name, imgsize = args.imgsize , class_num=N_CLASSES),
+                TrainDatasetTripletBatchAug_BG(root, df, debug=args.debug, name=name, imgsize = args.imgsize , class_num=N_CLASSES),
                 shuffle=True,
                 batch_size=args.batch_size,
                 num_workers=args.workers,
-                collate_fn= collate_TrainDatasetTriplet
+                collate_fn= collate_TrainDatasetTripletBatchAug_BG
             )
         else:
             return DataLoader(
@@ -123,17 +121,19 @@ def main():
             num_classes=base_model_class, pretrained='imagenet')
 
 
-    if 'se' not in args.model and 'ception' not in args.model and 'dpn' not in args.model:
-        fresh_params = list(model.fresh_params())
-
-
-
     #finetune::load model with old settings first and then change the last layer for new task!
     if args.finetuning:
         print('Doing finetune initial...')
-        load_par_gpu_model_gpu(model, Path(str(run_root) + '/' + 'model_base.initial') )
+        # load_par_gpu_model_gpu(model, Path(str(run_root) + '/' + 'model_base.initial') )
         # load_model(model, Path(str(run_root) + '/' + 'model_base.initial'))
-        model.finetuning(N_CLASSES)
+        # model.finetuning(N_CLASSES)
+        # load_model_ex_inceptionv4(model, Path(str(run_root) + '/' + 'max_valid_model.pth'))
+        model.finetune(str(run_root) + '/' + 'max_valid_model.pth')
+        # model.freeze_clsnet()
+        model.freeze_net()
+    else:
+        model.initial()
+
 
     ##params::Add here
     #params list[models.parameters()]
@@ -174,74 +174,15 @@ def main():
 
         train(params=all_params, **train_kwargs)
 
-        # #if args.pretrained and args.model != 'se_resnext50' and args.model != 'se_resnext101':
-        # if 'se' not in args.model and 'ception' not in args.model and args.pretrained and 'dpn' not in args.model:
-        #     if train(params=fresh_params, n_epochs=1, **train_kwargs):
-        #         train(params=all_params, **train_kwargs)
-        # else:
-        #     train(params=all_params, **train_kwargs)
-
-
     elif args.mode == 'validate':
         valid_loader = make_loader(valid_fold, valid_root ,image_transform=test_transform, name='valid')
-        load_model(model, Path(str(run_root) + '/' + args.ckpt))
+        if args.finetuning:
+            pass
+        else:
+            load_model(model, Path(str(run_root) + '/' + args.ckpt))
         validation(model, criterion, tqdm.tqdm(valid_loader, desc='Validation'),
                    use_cuda=use_cuda)
 
-    elif args.mode.startswith('predict'):
-
-        load_model(model, Path(str(run_root) + '/' + args.ckpt))
-        predict_kwargs = dict(
-            batch_size=args.batch_size,
-            tta=args.tta,
-            use_cuda=use_cuda,
-            workers=args.workers,
-        )
-
-        if args.mode == 'predict_valid':
-            predict(model, df=valid_fold, root=train_root,
-                    out_path=Path(str(run_root) + '/' + 'val.h5'),
-                    **predict_kwargs)
-
-        elif args.mode == 'predict_test':
-
-            load_model(model, Path(str(run_root) + '/' + args.ckpt))
-            print(args.ckpt)
-
-
-            test_root = DATA_ROOT + '/' + (
-                'test_sample' if args.use_sample else 'test2')
-            test_df = pd.read_csv('train_val_test.csv')
-            test_df = test_df[test_df['fold'] == 2]
-            tta_code_list = []
-            tta_code_list.append([0, 0])
-            tta_code_list.append([0, 1])
-            tta_code_list.append([0, 2])
-            tta_code_list.append([0, 3])
-            tta_code_list.append([0, 4])
-            tta_code_list.append([1, 0])
-            tta_code_list.append([1, 1])
-            tta_code_list.append([1, 2])
-            tta_code_list.append([1, 3])
-            tta_code_list.append([1, 4])
-
-            tta_code_list.append([0, 5])
-            tta_code_list.append([1, 5])
-
-            save_dir = str(run_root) + '/12tta'
-            if not os.path.exists(save_dir):
-                os.makedirs(save_dir)
-
-            for tta_code in tta_code_list:
-                print(tta_code)
-                predict(model,
-                        df=test_df,
-                        root=test_root,
-                        out_path=Path(str(run_root) +  '/12tta/fold' + str(args.fold)+'_'+str(tta_code[0]) + str(tta_code[1]) + '_test.h5'),
-                        batch_size = args.batch_size,
-                        tta_code=tta_code,
-                        workers=8,
-                        use_cuda=True)
 #=============================================================================================================================
 #End of main
 #=============================================================================================================================
@@ -337,9 +278,9 @@ def train(args, model: nn.Module, criterion, *, params,
     for epoch in range(epoch, n_epochs + 1):
         model.train()
         tq = tqdm.tqdm(total=(args.epoch_size or
-                              TrainDatasetTriplet.tbatch()*len(train_loader) * args.batch_size))
+                              TrainDatasetTripletBatchAug_BG.tbatch()*len(train_loader) * args.batch_size))
 
-        if epoch >= 10:
+        if epoch >= 20 and epoch%2==0:
             lr = lr * 0.9
             adjust_learning_rate(optimizer, lr)
             print(f'lr updated to {lr}')
@@ -363,7 +304,7 @@ def train(args, model: nn.Module, criterion, *, params,
                 loss1 = softmax_loss(outputs, targets)
                 loss2 = TripletLossV1(margin=0.5)(feats,targets)
 
-                loss = 0.5*loss1 + loss2
+                loss = 0.25*loss1 + 0.75*loss2
 
                 batch_size = inputs.size(0)
 
@@ -438,17 +379,7 @@ def validation(
     metrics['valid_loss'] = np.mean(all_losses)
     metrics['valid_top1'] = acc[0].item()
     metrics['valid_top5'] = acc[1].item()
-    #         all_losses.append(_reduce_loss(loss).item())
-    #         predictions = torch.sigmoid(outputs)
-    #         all_predictions.append(predictions.cpu().numpy())
-    # all_predictions = np.concatenate(all_predictions)
-    # all_targets = np.concatenate(all_targets)
-    # metrics = {}
-    # metrics['Recall'] = recall_score(all_targets, all_predictions)
-    # metrics['Precision'] = precision_score(all_targets, all_predictions)
-    # metrics['F1 score'] = f1_score(all_targets, all_predictions)
-    # metrics['AUC'] = roc_auc_score(all_targets, all_predictions)
-    # metrics['valid_loss'] = np.mean(all_losses)
+
     print(' | '.join(f'{k} {v:.3f}' for k, v in sorted(metrics.items(), key=lambda kv: -kv[1])))
 
     return metrics

@@ -47,6 +47,44 @@ def load_par_gpu_model_gpu(model: nn.Module, path: Path) -> Dict:
     return state
 
 
+def load_model_ex_inceptionv4(model:nn.Module, path:Path) -> Dict:
+    """
+    special loading function, where ckpt is transferred from yiheng
+    :param model: 
+    :param path: 
+    :return: 
+    """
+    device = torch.device('cuda')
+    state = torch.load(str(path),map_location=device)
+    pre_phs = 'basemodel.'
+    sz_pre_phs = len(pre_phs)
+    new_state = {k[sz_pre_phs:]:v for k,v in state.items() }
+    model.load_state_dict(new_state)
+    print('Load model from ' + str(path) )
+    return state
+
+def load_model_with_dict_replace(model:nn.Module, path:Path , old_phs:str , new_phs:str='', lastLayer:bool=True) -> Dict:
+    """
+    change the pre-desc of dict
+    :param model: 
+    :param path: 
+    :return: 
+    """
+    device = torch.device('cpu')
+    state = torch.load(str(path),map_location=device)
+    sz_old_phs = len(old_phs)
+    if lastLayer:
+        new_state = { str(new_phs+k[sz_old_phs:]):v for k,v in state.items() }
+        model.load_state_dict(new_state)
+    else:
+        cur_state = model.state_dict()
+        new_state = {str(new_phs + k[sz_old_phs:]): v for k, v in state.items() if 'last_linear' not in k }
+        cur_state.update(new_state)
+        model.load_state_dict(cur_state)
+    print('Load model from ' + str(path) )
+    return state
+
+
 def load_par_gpu_model_cpu(model: nn.Module, path: Path) -> Dict:
     device = torch.device('cpu')
     state = torch.load(str(path),map_location=device)

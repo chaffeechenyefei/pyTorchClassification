@@ -3,10 +3,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.model_zoo as model_zoo
+from models.netvlad import NetVladLayer
+from models.maskLayer import maskLayer
+from utils import *
 import os
 import sys
 
-__all__ = ['InceptionV4', 'inceptionv4']
+__all__ = ['InceptionV4', 'inceptionv4', 'inceptionv4_netvlad','inceptionv4_attention']
 
 pretrained_settings = {
     'inceptionv4': {
@@ -295,7 +298,7 @@ class InceptionV4(nn.Module):
             Inception_C(),
             Inception_C()
         )
-        self.last_linear = nn.Linear(1536, num_classes)
+        self.last_linear = nn.Linear(1536, num_classes,bias=False)
 
     def logits(self, features):
         #Allows image of any size to be processed
@@ -311,8 +314,7 @@ class InceptionV4(nn.Module):
         return feat_triplet,x
 
     def finetuning(self, num_classes):
-        self.last_linear = nn.Linear(1536,num_classes)
-
+        self.last_linear = nn.Linear(1536,num_classes,bias=False)
 
 def inceptionv4(num_classes=1000, pretrained='imagenet'):
     if pretrained:
@@ -330,7 +332,7 @@ def inceptionv4(num_classes=1000, pretrained='imagenet'):
         model.load_state_dict(model_dict)
 
         if pretrained == 'imagenet':
-            new_last_linear = nn.Linear(1536, num_classes)
+            new_last_linear = nn.Linear(1536, num_classes,bias=False)
             #new_last_linear.weight.data = model.last_linear.weight.data[1:]
             #new_last_linear.bias.data = model.last_linear.bias.data[1:]
             model.last_linear = new_last_linear
@@ -344,7 +346,144 @@ def inceptionv4(num_classes=1000, pretrained='imagenet'):
         model = InceptionV4(num_classes=num_classes)
     return model
 
+#=======================================================================================================================
+# InceptionV4_Attention 20190910
+#=======================================================================================================================
+class InceptionV4_Attention(nn.Module):
+    def __init__(self, num_classes=1001):
+        super(InceptionV4_Attention, self).__init__()
+        self.att_net = InceptionV4(4)
+        self.cls_net = InceptionV4(num_classes)
+        self.mask_net = maskLayer()
+        self.sig = nn.Sigmoid()
+        self.bbox = None
+        self.xywh = None
 
+    def forward(self,input):
+        _,xywh = self.att_net(input)
+        self.xywh = xywh.copy()
+        xywh = self.sig(xywh)
+        mask = self.mask_net(xywh,imgSize=input.shape[2])
+        self.bbox = mask.copy()
+        mask = mask.expand(-1, 3, -1, -1)
+        mask_input = input*mask
+
+        feat_triplet, result = self.cls_net(mask_input)
+
+        return feat_triplet,result
+
+    def finetune(self,model_path:str):
+        load_model_with_dict_replace(self.cls_net,model_path,'basemodel.','')
+        load_model_with_dict_replace(self.att_net,model_path,'basemodel.','',lastLayer=False)
+
+    def freeze_clsnet(self):
+        for param in self.cls_net.parameters():
+            param.requires_grad = False
+
+    def initial(self):
+        settings = pretrained_settings['inceptionv4']['imagenet']
+        pretrained_dict = model_zoo.load_url(settings['url'])
+
+        cls_dict = self.cls_net.state_dict()
+        pretrained_cls_dict = {k: v for k, v in pretrained_dict.items() if k in cls_dict and 'last_linear' not in k}
+        cls_dict.update(pretrained_cls_dict)
+        self.cls_net.load_state_dict(cls_dict)
+
+        att_dict = self.att_net.state_dict()
+        pretrained_att_dict= {k: v for k, v in pretrained_dict.items() if k in att_dict and 'last_linear' not in k}
+        att_dict.update(pretrained_att_dict)
+        self.att_net.load_state_dict(att_dict)
+
+
+def inceptionv4_attention(num_classes=1000, pretrained='imagenet'):
+    model = InceptionV4_Attention(num_classes)
+    return model
+#=======================================================================================================================
+# InceptionV4_Attention Ends
+#=======================================================================================================================
+
+#=======================================================================================================================
+# InceptionV4_NetVlad 20190909
+#=======================================================================================================================
+class InceptionV4_NetVlad(nn.Module):
+
+    def __init__(self, num_classes=1001):
+        super(InceptionV4_NetVlad, self).__init__()
+        # Special attributs
+        self.input_space = None
+        self.input_size = (299, 299, 3)
+        self.mean = None
+        self.std = None
+        self.dictnum = 64
+        # Modules
+        self.features = nn.Sequential(
+            BasicConv2d(3, 32, kernel_size=3, stride=2),
+            BasicConv2d(32, 32, kernel_size=3, stride=1),
+            BasicConv2d(32, 64, kernel_size=3, stride=1, padding=1),
+            Mixed_3a(),
+            Mixed_4a(),
+            Mixed_5a(),
+            Inception_A(),
+            Inception_A(),
+            Inception_A(),
+            Inception_A(),
+            Reduction_A(), # Mixed_6a
+            Inception_B(),
+            Inception_B(),
+            Inception_B(),
+            Inception_B(),
+            Inception_B(),
+            Inception_B(),
+            Inception_B(),
+            Reduction_B(), # Mixed_7a
+            Inception_C(),
+            Inception_C(),
+            Inception_C()
+        )
+
+        self.convPool = nn.Conv2d(1536,256,(1,1))
+        self.netvlad = NetVladLayer(256,self.dictnum)
+        self.last_linear = nn.Linear(256*self.dictnum,num_classes)
+
+
+    def getvladfeat(self,features):
+        x = self.convPool(features)
+        x = F.leaky_relu(x)
+        feat_triplet = self.netvlad(x)
+        x = self.last_linear(feat_triplet)
+        return x,feat_triplet
+
+    def forward(self, input):
+        x = self.features(input)
+        x,feat_triplet = self.getvladfeat(x)
+        return feat_triplet,x
+
+    def changelastlayer(self, num_classes):
+        self.last_linear = nn.Linear(256*self.dictnum,num_classes)
+
+    def finetune(self,model_path:str):
+        load_model_with_dict_replace(self,model_path,'basemodel.','',False)
+
+    def freeze_net(self):
+        for param in self.features.parameters():
+            param.requires_grad = False
+
+    def initial(self):
+        settings = pretrained_settings['inceptionv4']['imagenet']
+        pretrained_dict = model_zoo.load_url(settings['url'])
+
+        cls_dict = self.state_dict()
+        pretrained_cls_dict = {k: v for k, v in pretrained_dict.items() if k in cls_dict and 'last_linear' not in k}
+        cls_dict.update(pretrained_cls_dict)
+        self.load_state_dict(cls_dict)
+
+
+def inceptionv4_netvlad(num_classes=1000, pretrained='imagenet'):
+    model = InceptionV4_NetVlad(num_classes=num_classes)
+    return model
+#=======================================================================================================================
+# InceptionV4_NetVlad Ends
+#=======================================================================================================================
 '''
 TEST
 Run this code with:

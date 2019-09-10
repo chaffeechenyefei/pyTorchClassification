@@ -74,28 +74,22 @@ class TrainDatasetTriplet(Dataset):
         # choose label from data a
         # choose any tow sample from data b bcz 1 image per class
         labelA = int(idx % self._class_num)
-        # print(labelA)
-        # print('ds1')
         dfA = self._df[self._df['attribute_ids'] == labelA]
         while dfA.empty:
             labelA = random.randint(0,self._class_num-1)
             dfA = self._df[self._df['attribute_ids'] == labelA]
 
-        # print('ds2')
         len_dfA = len(dfA)
         assert(len_dfA!=0)
         pair_idxA = [random.randint(0, len_dfA - 1) for _ in range(4)]#有重采样
-        # print('ds3')
         images = []
         targets = []
 
         #pos
         for idxA in pair_idxA:
-            # print('dsx')
             item = dfA.iloc[idxA]
             image = load_transform_image_iaa(item, self._root, imgsize=self._imgsize, debug=self._debug,
                                          name=self._name)
-            # print('load done')
             lb = int(item.attribute_ids)
             assert (lb < self._class_num)
             images.append(image)
@@ -177,11 +171,9 @@ class TrainDatasetTripletBatchAug(Dataset):
 
         #pos
         for idxA in pair_idxA:
-            # print('dsx')
             item = dfA.iloc[idxA]
             image = load_image_uint8(item, self._root, imgsize=self._imgsize, debug=self._debug,
                                          name=self._name)
-            # print('load done')
             lb = int(item.attribute_ids)
             assert (lb < self._class_num)
             images.append(image)
@@ -214,6 +206,101 @@ class TrainDatasetTripletBatchAug(Dataset):
 
 
 def collate_TrainDatasetTripletBatchAug(batch):
+    """
+    special collate_fn function for UDF class TrainDatasetTriplet
+    :param batch: 
+    :return: 
+    """
+    # batch_size = len(batch)
+    images = []
+    labels = []
+
+    for b in batch:
+        if b[0] is None:
+            continue
+        else:
+            images.extend(b[0])
+            labels.extend(b[1])
+
+    images = torch.stack(images, 0)  # images : list of [C,H,W] -> [Len_of_list, C, H,W]
+    labels = torch.from_numpy(np.array(labels))
+    assert (images.shape[0] == labels.shape[0])
+    return images, labels
+
+
+class TrainDatasetTripletBatchAug_BG(Dataset):
+    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256, class_num = -1):
+        super().__init__()
+        self._root = root
+        self._df = df
+        self._debug = debug
+        self._name = name
+        self._imgsize = imgsize
+        self._class_num = class_num
+
+    def __len__(self):#how much times will each epoch sample
+        return min(max(len(self._df),10000),16000)
+        # return self._class_num*125
+
+    @staticmethod
+    def tbatch():
+        return 4
+
+    def __getitem__(self, idx: int):
+        # choose label from data a
+        # choose any tow sample from data b bcz 1 image per class
+        labelA = int(idx % self._class_num)
+
+        dfA = self._df[self._df['attribute_ids'] == labelA]
+        while dfA.empty:
+            labelA = random.randint(0,self._class_num-1)
+            dfA = self._df[self._df['attribute_ids'] == labelA]
+
+        len_dfA = len(dfA)
+        assert(len_dfA!=0)
+        pair_idxA = [random.randint(0, len_dfA - 1) for _ in range(2)]#有重采样
+
+        images = []
+        targets = []
+
+        #pos
+        for idxA in pair_idxA:
+            item = dfA.iloc[idxA]
+            image = load_image(item, self._root)
+            image = rand_bg_resize_crop(image,item.id,imgsize=(self._imgsize,self._imgsize))
+            lb = int(item.attribute_ids)
+            assert (lb < self._class_num)
+            images.append(image)
+            targets.append(lb)
+
+
+        #neg
+        dfB = self._df[self._df['attribute_ids'] != labelA]
+        len_dfB = len(dfB)
+        pair_idxB = [random.randint(0, len_dfB - 1) for _ in range(2)]#有重采样
+
+        for idxB in pair_idxB:
+            item = dfB.iloc[idxB]
+            image = load_image(item, self._root)
+            image = rand_bg_resize_crop(image, item.id, imgsize=(self._imgsize,self._imgsize))
+            images.append(image)
+            lb = int(item.attribute_ids)
+            targets.append(lb)
+
+        # IAA Batch Operations
+        # print(images[0].shape)
+        images = np.stack(images, 0)
+
+        #images = [B,H,W,C]
+        images = iaa_transformer.act_batch(images)
+        images = np.transpose(images, (0, 3, 1, 2)) #[B,H,W,C] -> [B,C,H,W]
+        images = images.astype(np.float32)
+        images = images / 255.0
+
+        return torch.FloatTensor(images), targets
+
+
+def collate_TrainDatasetTripletBatchAug_BG(batch):
     """
     special collate_fn function for UDF class TrainDatasetTriplet
     :param batch: 
@@ -412,7 +499,9 @@ def load_test_image(item, root: Path, tta_code, imgsize):
 def load_image(item, root: Path) -> Image.Image:
     # print(str(root + '/' + f'{item.id}.jpg'))
     # image = cv2.imread(str(root + '/' + f'{item.id}'))
-    image = cv2.imread(str(f'{item.id}'))
+    image = cv2.imread( os.path.join(root,str(f'{item.id}')) )
+    # print(os.path.join(root,str(f'{item.id}')))
+    # print()
     # print(image.shape)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     return image
@@ -473,19 +562,5 @@ def load_image_uint8(item, root: Path, imgsize=256,debug: bool = False, name: st
 
     if debug:
         image.save('_debug.png')
-
-    # image = np.transpose(image, (2, 0, 1))
-    # image = image.astype(np.float32)
-    # image = image.reshape([-1, imgsize, imgsize])
-    # image = image / 255.0
-
-    # is_venn = True
-    # if is_venn:
-    #     # mean = [0.485, 0.456, 0.406]
-    #     # std = [0.229, 0.224, 0.225]
-    #     image[0,:,:] = (image[0,:,:] - 0.485) / 0.229
-    #     image[1,:,:] = (image[1,:,:] - 0.456) / 0.224
-    #     image[2,:,:] = (image[2,:,:] - 0.406) / 0.225
-
     return image
 
