@@ -524,7 +524,7 @@ def load_transform_image_iaa(item, root: Path, imgsize=256,debug: bool = False, 
         image = rotate(image, angle, center=None, scale=1.0)
         image_aug = iaa_transformer.act(image)
     else:
-        image_aug = random_cropping(image, ratio=0.8, is_random=False)
+        image_aug = random_cropping(image, ratio=0.95, is_random=False)
 
     image = cv2.resize(image_aug, (imgsize, imgsize))
 

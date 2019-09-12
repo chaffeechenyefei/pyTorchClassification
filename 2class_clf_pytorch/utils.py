@@ -47,14 +47,14 @@ def load_par_gpu_model_gpu(model: nn.Module, path: Path) -> Dict:
     return state
 
 
-def load_model_ex_inceptionv4(model:nn.Module, path:Path) -> Dict:
+def load_model_ex_inceptionv4(model:nn.Module, path:Path , map_location = 'cuda') -> Dict:
     """
     special loading function, where ckpt is transferred from yiheng
     :param model: 
     :param path: 
     :return: 
     """
-    device = torch.device('cuda')
+    device = torch.device(map_location)
     state = torch.load(str(path),map_location=device)
     pre_phs = 'basemodel.'
     sz_pre_phs = len(pre_phs)

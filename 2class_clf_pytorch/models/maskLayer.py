@@ -49,6 +49,64 @@ class maskLayer(nn.Module):
         return s3
 
 
+class gaussianMaskLayer(nn.Module):
+    def __init__(self):
+        super(gaussianMaskLayer,self).__init__()
+        self._freeze_center = False
+        self._freeze_radius = False
+
+
+    def forward(self,input, imgSize):
+        #input = [N,4] cx,cy,deltax,deltay
+        N = input.shape[0]
+
+        if self._freeze_radius:
+            deltax = torch.ones(N,1)*0.5*imgSize
+            deltay = torch.ones(N,1)*0.5*imgSize
+        else:
+            deltax, deltay = input[:,2]*imgSize,input[:,3]*imgSize
+
+        if self._freeze_center:
+            cx = torch.ones(N,1)*0.5*imgSize
+            cy = torch.ones(N,1)*0.5*imgSize
+        else:
+            cx,cy = input[:,0]*imgSize,input[:,1]*imgSize #[N,1]
+
+        xcols = torch.arange(0, imgSize, dtype=torch.float).view(1,-1)  # 1,cols
+        yrows = torch.arange(0, imgSize, dtype=torch.float).view(1,-1)  # 1,rows
+
+        if CUDA_FLAG:
+            xcols = xcols.cuda()
+            yrows = yrows.cuda()
+            cx = cx.cuda()
+            cy = cy.cuda()
+            deltax = deltax.cuda()
+            deltay = deltay.cuda()
+
+        bxcols = xcols.unsqueeze(1).expand(N,imgSize,-1)
+        byrows = yrows.unsqueeze(2).expand(N,-1,imgSize) #[N,H,W]
+
+
+        bx = cx.view(-1,1).unsqueeze(2).expand(-1, imgSize,imgSize)  # N,cols,rows
+        by = cy.view(-1,1).unsqueeze(2).expand(-1, imgSize,imgSize)
+
+        bdeltax = deltax.view(-1,1).unsqueeze(2).expand(-1, imgSize,imgSize)
+        bdeltay = deltay.view(-1,1).unsqueeze(2).expand(-1, imgSize,imgSize)
+
+        B = (bxcols - bx)**2 / (2*bdeltax**2) + (byrows - by)**2 / (2*bdeltay**2)
+        A = torch.exp(-B)
+        A = A.unsqueeze(1)
+
+        return A
+
+    def freeze_center(self):
+        self._freeze_center = True
+
+    def freeze_radius(self):
+        self._freeze_radius = True
+
+
+
 
 
 if __name__ == '__main__':

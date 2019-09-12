@@ -1,6 +1,10 @@
 from skimage.util import view_as_windows as viewW
 import numpy as np
 
+
+#=======================================================================================================================
+# list -> str
+#=======================================================================================================================
 def list2str(List:list,backend = '')->str:
     """
     list2str
@@ -15,6 +19,9 @@ def list2str(List:list,backend = '')->str:
         res = res[:-1]
     return res+backend
 
+#=======================================================================================================================
+# different version of image to column(img2col,im2col)
+#=======================================================================================================================
 #https://stackoverflow.com/questions/30109068/implement-matlabs-im2col-sliding-in-python
 # im2col
 def im2col_sliding_broadcasting(A, BSZ, stepsize=1):
@@ -57,6 +64,10 @@ def im2col_sliding_strided_v2(A, BSZ, stepsize=1):
     return viewW(A, (BSZ[0],BSZ[1])).reshape(-1,BSZ[0]*BSZ[1]).T[:,::stepsize]
 
 
+
+#=======================================================================================================================
+# main
+#=======================================================================================================================
 if __name__ == '__main__':
     import os
     import cv2

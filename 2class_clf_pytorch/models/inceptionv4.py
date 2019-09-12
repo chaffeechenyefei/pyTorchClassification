@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.model_zoo as model_zoo
 from models.netvlad import NetVladLayer
-from models.maskLayer import maskLayer
+from models.maskLayer import *
 from utils import *
 import os
 import sys
@@ -299,6 +299,8 @@ class InceptionV4(nn.Module):
             Inception_C()
         )
         self.last_linear = nn.Linear(1536, num_classes,bias=False)
+        self.feature_map = None
+        self._infer_mode = False
 
     def logits(self, features):
         #Allows image of any size to be processed
@@ -308,13 +310,46 @@ class InceptionV4(nn.Module):
         x = self.last_linear(feat_triplet)
         return x,feat_triplet
 
+    def get_featuremap(self):
+        if self.feature_map is not None:
+            self.feature_map = torch.sum(self.feature_map, dim=1)
+
+    def set_infer_mode(self):
+        self._infer_mode = True
+
     def forward(self, input):
         x = self.features(input)
+
+        if self._infer_mode:
+            x_dim = x.shape[1]
+            msk = torch.sum(x,dim=1,keepdim=True) #[B,1,H,W]
+            # msk = 1000*( ( msk - msk.min() ) / ( msk.max() - msk.min() ) - 0.1 )
+            msk = (( msk - msk.min() ) / ( msk.max() - msk.min() ) > 0.01).float()
+            msk = msk.expand((-1,x_dim,-1,-1)) #[B,...,H,W]
+            x = msk*x
+
+        self.feature_map = x
         x,feat_triplet = self.logits(x)
         return feat_triplet,x
 
-    def finetuning(self, num_classes):
+    def changelastlayer(self, num_classes):
         self.last_linear = nn.Linear(1536,num_classes,bias=False)
+
+    def finetune(self,model_path:str):
+        load_model_with_dict_replace(self,model_path,'basemodel.','')
+
+    def freeze_net(self):
+        for param in self.features.parameters():
+            param.requires_grad = False
+
+    def initial(self):
+        settings = pretrained_settings['inceptionv4']['imagenet']
+        pretrained_dict = model_zoo.load_url(settings['url'])
+
+        cls_dict = self.cls_net.state_dict()
+        pretrained_cls_dict = {k: v for k, v in pretrained_dict.items() if k in cls_dict and 'last_linear' not in k}
+        cls_dict.update(pretrained_cls_dict)
+        self.load_state_dict(cls_dict)
 
 def inceptionv4(num_classes=1000, pretrained='imagenet'):
     if pretrained:
@@ -333,8 +368,6 @@ def inceptionv4(num_classes=1000, pretrained='imagenet'):
 
         if pretrained == 'imagenet':
             new_last_linear = nn.Linear(1536, num_classes,bias=False)
-            #new_last_linear.weight.data = model.last_linear.weight.data[1:]
-            #new_last_linear.bias.data = model.last_linear.bias.data[1:]
             model.last_linear = new_last_linear
 
         model.input_space = settings['input_space']
@@ -354,17 +387,17 @@ class InceptionV4_Attention(nn.Module):
         super(InceptionV4_Attention, self).__init__()
         self.att_net = InceptionV4(4)
         self.cls_net = InceptionV4(num_classes)
-        self.mask_net = maskLayer()
+        self.mask_net = gaussianMaskLayer()
         self.sig = nn.Sigmoid()
         self.bbox = None
         self.xywh = None
 
     def forward(self,input):
         _,xywh = self.att_net(input)
-        self.xywh = xywh.copy()
+        self.xywh = 1.0*xywh
         xywh = self.sig(xywh)
         mask = self.mask_net(xywh,imgSize=input.shape[2])
-        self.bbox = mask.copy()
+        self.bbox = 1.0*mask
         mask = mask.expand(-1, 3, -1, -1)
         mask_input = input*mask
 
@@ -379,6 +412,9 @@ class InceptionV4_Attention(nn.Module):
     def freeze_clsnet(self):
         for param in self.cls_net.parameters():
             param.requires_grad = False
+
+    def freeze_attnet_radius(self):
+        self.mask_net.freeze_radius()
 
     def initial(self):
         settings = pretrained_settings['inceptionv4']['imagenet']
@@ -414,7 +450,7 @@ class InceptionV4_NetVlad(nn.Module):
         self.input_size = (299, 299, 3)
         self.mean = None
         self.std = None
-        self.dictnum = 64
+        self.dictnum = 128
         # Modules
         self.features = nn.Sequential(
             BasicConv2d(3, 32, kernel_size=3, stride=2),

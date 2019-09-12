@@ -131,8 +131,14 @@ def main():
         model.finetune(str(run_root) + '/' + 'max_valid_model.pth')
         # model.freeze_clsnet()
         model.freeze_net()
+        # model.freeze_attnet_radius()
     else:
         model.initial()
+        md_path = Path(str(run_root) + '/' + args.ckpt)
+        if md_path.exists():
+            print('load weights from md_path')
+            load_model(model,md_path)
+        model.freeze_net()
 
 
     ##params::Add here
@@ -180,6 +186,7 @@ def main():
             pass
         else:
             load_model(model, Path(str(run_root) + '/' + args.ckpt))
+        # model.set_infer_mode()
         validation(model, criterion, tqdm.tqdm(valid_loader, desc='Validation'),
                    use_cuda=use_cuda)
 
@@ -238,6 +245,7 @@ def train(args, model: nn.Module, criterion, *, params,
     model_path = Path(str(run_root) + '/' + 'model.pt')
 
     if model_path.exists():
+        print('loading existing weights from model.pt')
         state = load_model(model, model_path)
         epoch = state['epoch']
         step = state['step']
@@ -366,6 +374,8 @@ def validation(
             all_predictions.append(outputs)
     all_predictions = torch.cat(all_predictions)
     all_targets = torch.cat(all_targets)#list->torch
+    print('all_predictions.shape: ')
+    print(all_predictions.shape)
 
     acc = topkAcc(all_predictions,all_targets.cuda(),topk=(1,5))
 
