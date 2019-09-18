@@ -346,7 +346,7 @@ class InceptionV4(nn.Module):
         settings = pretrained_settings['inceptionv4']['imagenet']
         pretrained_dict = model_zoo.load_url(settings['url'])
 
-        cls_dict = self.cls_net.state_dict()
+        cls_dict = self.state_dict()
         pretrained_cls_dict = {k: v for k, v in pretrained_dict.items() if k in cls_dict and 'last_linear' not in k}
         cls_dict.update(pretrained_cls_dict)
         self.load_state_dict(cls_dict)

@@ -16,7 +16,7 @@ from torch.optim import Adam, SGD
 import tqdm
 import os
 import models.models as models
-from dataset import TrainDataset, TTADataset, get_ids,TrainDatasetTripletBatchAug_BG,collate_TrainDatasetTripletBatchAug_BG
+from dataset import TrainDataset, TTADataset, get_ids,TrainDatasetBatchAug_BG_4_BBox,collate_TrainDatasetBatchAug_BG_4_BBox
 from transforms import train_transform, test_transform
 from utils import (write_event, load_model, load_model_ex_inceptionv4, load_par_gpu_model_gpu, mean_df, ThreadingDataLoader as DataLoader, adjust_learning_rate,
                    ON_KAGGLE)
@@ -30,8 +30,8 @@ TR_DATA_ROOT = '/home/ubuntu/dataset/furniture/FFE_render_train_all/'
 # TT_DATA_ROOT = '/home/ubuntu/dataset/furniture/FFE_render_train_all'
 TT_DATA_ROOT = '/home/ubuntu/dataset/furniture/matched_matt_new/'
 
-OLD_N_CLASSES = 26
-N_CLASSES = 26#253#109
+OLD_N_CLASSES = 4
+N_CLASSES = 4#253#109
 #=============================================================================================================================
 #main
 #=============================================================================================================================
@@ -40,9 +40,9 @@ def main():
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
     arg('--mode', choices=['train', 'validate', 'predict_valid', 'predict_test'], default='train')
-    arg('--run_root', default='result/furniture_render_inception')
+    arg('--run_root', default='result/furniture_bbox')
     arg('--fold', type=int, default=0)
-    arg('--model', default='inception_v4_netvlad')
+    arg('--model', default='inception_v4')
     arg('--ckpt', type=str, default='model_loss_best.pt')
     arg('--pretrained', type=str, default='imagenet')#resnet 1, resnext imagenet
     arg('--batch-size', type=int, default=8)
@@ -88,22 +88,24 @@ def main():
     def make_loader(df: pd.DataFrame, root, image_transform, name='train') -> DataLoader:
         if name == 'train':
             return DataLoader(
-                TrainDatasetTripletBatchAug_BG(root, df, debug=args.debug, name=name, imgsize = args.imgsize , class_num=N_CLASSES),
+                TrainDatasetBatchAug_BG_4_BBox(root, df, debug=args.debug, name=name, imgsize = args.imgsize , class_num=N_CLASSES),
                 shuffle=True,
                 batch_size=args.batch_size,
                 num_workers=args.workers,
-                collate_fn= collate_TrainDatasetTripletBatchAug_BG
+                collate_fn= collate_TrainDatasetBatchAug_BG_4_BBox
             )
         else:
             return DataLoader(
-                TrainDataset(root, df, debug=args.debug, name=name, imgsize = args.imgsize, class_num=N_CLASSES),
+                TrainDatasetBatchAug_BG_4_BBox(root, df, debug=args.debug, name=name, imgsize = args.imgsize, class_num=N_CLASSES),
                 shuffle=True,
                 batch_size=args.batch_size,
                 num_workers=args.workers,
+                collate_fn=collate_TrainDatasetBatchAug_BG_4_BBox
             )
 
     #Not used in this version
-    criterion = nn.BCEWithLogitsLoss(reduction='none')
+    # criterion = nn.BCEWithLogitsLoss(reduction='none')
+    criterion = nn.MSELoss(reduce='none')
     # criterion = nn.CrossEnropyLoss(reduction='none)
 
     # se- ception dpn can only use finetuned model from imagenet
@@ -138,7 +140,7 @@ def main():
         if md_path.exists():
             print('load weights from md_path')
             load_model(model,md_path)
-        model.freeze_net()
+        # model.freeze_net()
 
 
     ##params::Add here
@@ -286,7 +288,7 @@ def train(args, model: nn.Module, criterion, *, params,
     for epoch in range(epoch, n_epochs + 1):
         model.train()
         tq = tqdm.tqdm(total=(args.epoch_size or
-                              TrainDatasetTripletBatchAug_BG.tbatch()*len(train_loader) * args.batch_size))
+                              TrainDatasetBatchAug_BG_4_BBox.tbatch()*len(train_loader) * args.batch_size))
 
         if epoch >= 20 and epoch%2==0:
             lr = lr * 0.9
@@ -308,11 +310,13 @@ def train(args, model: nn.Module, criterion, *, params,
                 feats, outputs= model(inputs)
                 outputs = outputs.squeeze()
                 feats = feats.squeeze()
+                outputs = torch.sigmoid(outputs)
+                loss = criterion(outputs, targets)
 
-                loss1 = softmax_loss(outputs, targets)
-                loss2 = TripletLossV1(margin=0.5)(feats,targets)
-
-                loss = 0.25*loss1 + 0.75*loss2
+                # loss1 = softmax_loss(outputs, targets)
+                # loss2 = TripletLossV1(margin=0.5)(feats,targets)
+                #
+                # loss = 0.25*loss1 + 0.75*loss2
 
                 batch_size = inputs.size(0)
 
@@ -324,7 +328,7 @@ def train(args, model: nn.Module, criterion, *, params,
                 tq.update(batch_size)
                 losses.append(loss.item())
                 mean_loss = np.mean(losses[-report_each:])
-                tq.set_postfix(loss=f'{mean_loss:.3f}')
+                tq.set_postfix(loss=f'{mean_loss:.5f}')
 
                 if i and i % report_each == 0:
                     write_event(log, step, loss=mean_loss)
@@ -334,10 +338,11 @@ def train(args, model: nn.Module, criterion, *, params,
             print('saving')
             save(epoch + 1)
             print('validation')
-            valid_metrics = validation(model, criterion, valid_loader, use_cuda)
-            write_event(log, step, **valid_metrics)
-            valid_loss = valid_metrics['valid_loss']
-            valid_losses.append(valid_loss)
+            # valid_metrics = validation(model, criterion, valid_loader, use_cuda)
+            # write_event(log, step, **valid_metrics)
+            # valid_loss = valid_metrics['valid_loss']
+            # valid_losses.append(valid_loss)
+            valid_loss = mean_loss
 
             if valid_loss < best_valid_loss:
                 best_valid_loss = valid_loss
@@ -368,8 +373,9 @@ def validation(
             _,outputs = model(inputs)#torch@gpu
             # outputs = outputs.squeeze()
             # targets = targets.float()
-            # loss = criterion(outputs, targets)
-            loss = softmax_loss(outputs, targets)
+            outputs = torch.sigmoid(outputs)
+            loss = criterion(outputs, targets)
+            # loss = softmax_loss(outputs, targets)
             all_losses.append(loss.data.cpu().numpy())
             all_predictions.append(outputs)
     all_predictions = torch.cat(all_predictions)
@@ -377,20 +383,21 @@ def validation(
     print('all_predictions.shape: ')
     print(all_predictions.shape)
 
-    acc = topkAcc(all_predictions,all_targets.cuda(),topk=(1,5))
-
-    value, all_predictions = all_predictions.topk(1, dim=1, largest=True, sorted=True)
-
-    all_predictions = all_predictions.data.cpu().numpy()
-    all_targets =all_targets.data.cpu().numpy()
+    # acc = topkAcc(all_predictions,all_targets.cuda(),topk=(1,5))
+    # value, all_predictions = all_predictions.topk(1, dim=1, largest=True, sorted=True)
+    # all_predictions = all_predictions.data.cpu().numpy()
+    # all_targets =all_targets.data.cpu().numpy()
 
     metrics = {}
-    metrics['valid_f1'] = fbeta_score(all_targets, all_predictions, beta=1, average='macro')
+    # metrics['valid_f1'] = fbeta_score(all_targets, all_predictions, beta=1, average='macro')
+    metrics['valid_f1'] = 0
     metrics['valid_loss'] = np.mean(all_losses)
-    metrics['valid_top1'] = acc[0].item()
-    metrics['valid_top5'] = acc[1].item()
+    metrics['valid_top1'] = 0
+    metrics['valid_top5'] = 0
+    # metrics['valid_top1'] = acc[0].item()
+    # metrics['valid_top5'] = acc[1].item()
 
-    print(' | '.join(f'{k} {v:.3f}' for k, v in sorted(metrics.items(), key=lambda kv: -kv[1])))
+    print(' | '.join(f'{k} {v:.5f}' for k, v in sorted(metrics.items(), key=lambda kv: -kv[1])))
 
     return metrics
 

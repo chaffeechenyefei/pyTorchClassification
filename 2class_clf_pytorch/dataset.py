@@ -20,6 +20,9 @@ from transforms import iaaTransform
 iaa_transformer = iaaTransform()
 iaa_transformer.getSeq()
 
+#=======================================================================================================================
+# Standard Data load with one image each time and do not consider triplet loss(P/N sample pairs)
+#=======================================================================================================================
 class TrainDataset(Dataset):
     def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize = 256 , class_num = -1):
         super().__init__()
@@ -51,7 +54,10 @@ class TrainDataset(Dataset):
         target = torch.from_numpy(np.array(clsval))
         return image, target
 
-
+#=======================================================================================================================
+# Vanilla Data loader for Triplet loss, data loading is not fast because each time 8 images will be loaded and doing aug
+# separately(not in batch version)
+#=======================================================================================================================
 class TrainDatasetTriplet(Dataset):
     def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256, class_num = -1):
         super().__init__()
@@ -134,6 +140,9 @@ def collate_TrainDatasetTriplet(batch):
     labels = torch.from_numpy(np.array(labels))
     return images, labels
 
+#=======================================================================================================================
+# Standard Triplet loss data loader and data aug is done with batch
+#=======================================================================================================================
 class TrainDatasetTripletBatchAug(Dataset):
     def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256, class_num = -1):
         super().__init__()
@@ -145,7 +154,7 @@ class TrainDatasetTripletBatchAug(Dataset):
         self._class_num = class_num
 
     def __len__(self):#how much times will each epoch sample
-        return min(max(len(self._df),20000),40000)
+        return min(max(len(self._df),40000),20000)
         # return self._class_num*125
 
     @staticmethod
@@ -227,7 +236,9 @@ def collate_TrainDatasetTripletBatchAug(batch):
     assert (images.shape[0] == labels.shape[0])
     return images, labels
 
-
+#=======================================================================================================================
+# Specific version of triplet loss data loader and data aug is done with batch. Also, image is added with background.
+#=======================================================================================================================
 class TrainDatasetTripletBatchAug_BG(Dataset):
     def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256, class_num = -1):
         super().__init__()
@@ -239,7 +250,7 @@ class TrainDatasetTripletBatchAug_BG(Dataset):
         self._class_num = class_num
 
     def __len__(self):#how much times will each epoch sample
-        return min(max(len(self._df),10000),16000)
+        return min(max(len(self._df),20000),15000)
         # return self._class_num*125
 
     @staticmethod
@@ -322,6 +333,90 @@ def collate_TrainDatasetTripletBatchAug_BG(batch):
     assert (images.shape[0] == labels.shape[0])
     return images, labels
 
+#=======================================================================================================================
+# Specific version of data loader and data aug is done with batch. Also, image is added with background. Label is bbox
+# [cx,cy,w,h] -> Real(0,1)
+#=======================================================================================================================
+class TrainDatasetBatchAug_BG_4_BBox(Dataset):
+    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256, class_num = -1):
+        super().__init__()
+        self._root = root
+        self._df = df
+        self._debug = debug
+        self._name = name
+        self._imgsize = imgsize
+        self._class_num = class_num
+
+    def __len__(self):#how much times will each epoch sample
+        return min(max(len(self._df),20000),15000)
+        # return self._class_num*125
+
+    @staticmethod
+    def tbatch():
+        return 1
+
+    def __getitem__(self, idx: int):
+        # choose label from data a
+        # choose any tow sample from data b bcz 1 image per class
+        # images = []
+        # targets = []
+
+        idxA = int(idx % len(self._df))
+        item = self._df.iloc[idxA]
+        image = load_image(item, self._root) #[H,W,C]
+        image,bbox = rand_bg_resize_crop_withbbox(image, item.id, imgsize=(self._imgsize, self._imgsize))
+
+        bbox = np.array(bbox).reshape(1,4)
+
+        return image,bbox
+
+
+        # save_img_debug(image,bbox)
+
+        #images = [H,W,C]
+
+        # image = iaa_transformer.act(image)
+        # image = np.transpose(image, (2,0,1)) #[H,W,C] -> [C,H,W]
+        # image = image.astype(np.float32)
+        # image = image / 255.0
+
+        # return torch.FloatTensor(image),torch.FloatTensor(bbox).reshape(1,4)
+
+def collate_TrainDatasetBatchAug_BG_4_BBox(batch):
+    """
+    special collate_fn function for UDF class TrainDatasetTriplet
+    :param batch:
+    :return:
+    """
+    # batch_size = len(batch)
+    images = []
+    labels = []
+
+    for b in batch:
+        if b[0] is None:
+            continue
+        else:
+            images.append(b[0])
+            labels.append(b[1])
+
+    images = np.stack(images,0) #[H,W,C] -> [B,H,W,C]
+
+    images = iaa_transformer.act_batch(images)
+    images = np.transpose(images, (0 ,3, 1, 2))  # [B,H,W,C] -> [B,C,H,W]
+    images = images.astype(np.float32)
+    images = images / 255.0
+
+    images = torch.FloatTensor(images)
+
+    labels = np.concatenate(labels,axis=0)
+    labels = torch.from_numpy(labels)
+    labels = labels.float()
+    assert (images.shape[0] == labels.shape[0])
+    return images, labels
+
+#=======================================================================================================================
+# Specific version of data loader for loading data from 2 kind of database. One can only be used for creating N pairs.
+#=======================================================================================================================
 # #item \
 # # - attribute_ids - id - folds - data: a,b
 class TrainDatasetSelected(Dataset):
@@ -564,3 +659,12 @@ def load_image_uint8(item, root: Path, imgsize=256,debug: bool = False, name: st
         image.save('_debug.png')
     return image
 
+def save_img_debug(img,bbox):
+    h,w,c = img.shape
+    bbox_abs = [bbox[0]*w,bbox[1]*h,bbox[2]*w,bbox[3]*h]
+    bbox_abs = [bbox_abs[0]-bbox_abs[2]/2, bbox_abs[1]-bbox_abs[3]/2, bbox_abs[2], bbox_abs[3] ]
+    pt1 = [ int(bbox_abs[0]) , int(bbox_abs[1]) ]
+    pt2 = [ int(bbox_abs[0]+bbox_abs[2]), int(bbox_abs[1]+bbox_abs[3]) ]
+    nimg = np.array(img)
+    cv2.rectangle(nimg,tuple(pt1),tuple(pt2),(255,0,0),2)
+    cv2.imwrite('m_debug.jpeg',nimg)

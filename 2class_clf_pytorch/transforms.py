@@ -138,8 +138,8 @@ class iaaTransform(object):
         self.seq = iaa.Sequential(
             [
                 # apply the following augmenters to most images
-                iaa.Fliplr(0.5), # horizontally flip 50% of all images
-                iaa.Flipud(0.5), # vertically flip 20% of all images
+                # iaa.Fliplr(0.5), # horizontally flip 50% of all images
+                # iaa.Flipud(0.5), # vertically flip 20% of all images
                 iaa.SomeOf((0, 5),
                     [
                         #sometimes(iaa.Superpixels(p_replace=(0, 1.0), n_segments=(20, 200))), # convert images into their superpixel representation

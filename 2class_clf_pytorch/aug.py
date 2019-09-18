@@ -12,7 +12,7 @@ import random
 import skimage
 import math
 import pandas as pd
-
+from typing import Union
 
 #=======================================================================================================================
 #Adding Backgrounds
@@ -54,6 +54,44 @@ def do_length_encode(x):
     rle = ' '.join([str(r) for r in rle])
     return rle
 
+def get_bbox_rle(rle,img):
+    h,w,_ = img.shape
+    mask = do_length_decode(rle,h,w,fill_value=1)
+
+    mask = np.where(mask > 0,0,1)
+    mask = mask.reshape(h, w, 1)
+
+    hhist = mask.sum(axis=1)
+    hhist2 = np.where(hhist>0,1,0)
+    hc = hhist2*np.arange(0,h)
+    hc = hc.mean() / h
+    height = hhist2.sum() / h
+
+    whist = mask.sum(axis=0)
+    whist2 = np.where(whist>0,1,0)
+    wc = whist2*np.arange(0,w)
+    wc = wc.mean() / w
+    width = whist2.sum() / w
+
+    return [wc,hc,width,height]
+
+def bbox_scale_pt(bbox:Union[list,tuple],scale:Union[list,tuple]):
+    nbbox = list(bbox).copy()
+    nbbox[0] = bbox[0]*scale[0]
+    nbbox[1] = bbox[1]*scale[1]
+    return nbbox
+
+def bbox_offset(bbox:Union[list,tuple],offset:Union[list,tuple]):
+    nbbox = list(bbox).copy()
+    nbbox[0] = bbox[0] + offset[0]
+    nbbox[1] = bbox[1] + offset[1]
+    return nbbox
+
+def bbox_scale(bbox:Union[list,tuple],scale:Union[list,tuple]):
+    nbbox = list(bbox).copy()
+    nbbox[2] = bbox[2]*scale[0]
+    nbbox[3] = bbox[3]*scale[1]
+    return nbbox
 
 def output_add_bg_img(rle, img, bg):
     bg_h, bg_w, _ = bg.shape
@@ -84,32 +122,99 @@ def output_add_bg_img(rle, img, bg):
     bg = cv2.medianBlur(bg, 5)
     return bg
 
+def output_add_bg_img_withbbox(rle, bbox ,img, bg):
+    bg_h, bg_w, _ = bg.shape
+    bg = cv2.resize(bg, (min(bg_w, bg_h), min(bg_w, bg_h)))
+    bg_h, bg_w, _ = bg.shape
+    h, w, _ = img.shape
+    mask = do_length_decode(rle, h, w, fill_value=255)
+    mask = np.where(mask > 0, 0, 1)
+
+    img_no_bg = (mask.reshape(h, w, 1) * img).astype('uint8')
+
+    resize_scale = random.uniform(0.3, 1) * bg_h
+    if w < h:
+        new_h = int(resize_scale)
+        new_w = int(resize_scale * w / h)
+    else:
+        new_w = int(resize_scale)
+        new_h = int(resize_scale * h / w)
+    img_no_bg_cp = cv2.resize(img_no_bg, (new_w, new_h))
+    alpha = np.where(img_no_bg_cp > 0, 1, 0)
+
+    start_x = random.randint(0, bg_w - new_w)
+    start_y = random.randint(0, bg_h - new_h)
+
+    # offset = [start_x/bg_w , start_y/bg_h]
+    # scale_wh = [new_w/bg_w, new_h/bg_h]
+
+    offset = [start_x / bg_w, start_y / bg_h]
+    scale_wh = [new_w / bg_w, new_h / bg_h]
+
+    # (x,y)->(x+offx)/bg_w, (y+offy)/bg_h = x_hat*(new_w/bg_w)+offx/bg_w, y_hat*(new_h/bg_h)+offy/bg_h
+    nbbox = bbox_scale_pt(bbox=bbox, scale=scale_wh)
+    nbbox = bbox_offset(bbox=nbbox, offset=offset)
+
+    nbbox = bbox_scale(bbox=nbbox, scale=scale_wh)
+
+    bg[start_y:start_y + new_h, start_x:start_x + new_w, :] = \
+        bg[start_y:start_y + new_h, start_x:start_x + new_w, :] * (1 - alpha) + \
+        img_no_bg_cp
+    bg = cv2.medianBlur(bg, 5)
+    return bg,nbbox
+
 
 def rand_bg_resize_crop(image,image_id,imgsize=(256,256)):
     if random.uniform(0, 1) > 0.9:
-        if random.uniform(0, 1) > 0.1:
+        if random.uniform(0, 1) > 0.1:#0.1*0.9 = 0.09
             ratio = random.uniform(0.6, 0.99)
             image = cv2.resize(image, imgsize)
             image = random_cropping(image, ratio=ratio, is_random=True)
+        else:
+            pass #leak of image resize
     else:
         rle = df_rle.loc[image_id].values[0]
-        if random.uniform(0, 1) > 0.5:
+        if random.uniform(0, 1) > 0.5:#0.5*0.9 = 0.45
             bg_num = random.randint(0, 48)
             bg = cv2.imread('/home/ubuntu/dataset/furniture/background/' + str(bg_num) + '_bg.png')
-        else:
+        else:#0.45
             bg_num = random.randint(0, flick_len - 1)
             bg = cv2.imread(flick_path + flick_list[bg_num])
 
         image = output_add_bg_img(rle, image, bg)
         image = cv2.resize(image, imgsize)
 
-        if random.uniform(0, 1) > 0.1:
+        if random.uniform(0, 1) > 0.1:#0.9*0.9 = 0.81
             ratio = random.uniform(0.8, 0.99)
             image = random_cropping(image, ratio=ratio, is_random=True)
 
 
     image = cv2.resize(image,imgsize)
     return image
+
+def rand_bg_resize_crop_withbbox(image,image_id,imgsize=(256,256)):
+    rle = df_rle.loc[image_id].values[0]
+    bbox = get_bbox_rle(rle=rle, img=image)  # [wc,hc,width,height]
+    # print(bbox)
+
+    if random.uniform(0, 1) > 0.5:  # 0.5*0.9 = 0.45
+        bg_num = random.randint(0, 48)
+        bg = cv2.imread('/home/ubuntu/dataset/furniture/background/' + str(bg_num) + '_bg.png')
+    else:  # 0.45
+        bg_num = random.randint(0, flick_len - 1)
+        bg = cv2.imread(flick_path + flick_list[bg_num])
+
+    image,nbbox = output_add_bg_img_withbbox(rle, bbox,image, bg)
+    # print(nbbox)
+    image = cv2.resize(image, imgsize)
+
+    if random.uniform(0, 1) > 0.1:  # 0.9*0.9 = 0.81
+        ratio = random.uniform(0.8, 0.99)
+        image,nbbox = random_cropping_withbbox(image, bbox = nbbox,ratio=ratio, is_random=True)
+
+    image = cv2.resize(image,imgsize)
+    # print(nbbox)
+    return image, nbbox
 #=======================================================================================================================
 #Adding Backgrounds Ends
 #=======================================================================================================================
@@ -194,6 +299,36 @@ def random_cropping(image, ratio = 0.8, is_random = True):
 
     zeros = cv2.resize(zeros ,(width,height))
     return zeros
+
+def random_cropping_withbbox(image, bbox = [0.5,0.5,0.5,0.5] ,ratio = 0.8, is_random = True):
+    """
+    checked with data_aug.ipynb
+    :param image: 
+    :param bbox: 
+    :param ratio: 
+    :param is_random: 
+    :return: 
+    """
+    height, width, _ = image.shape
+    target_h = int(height*ratio)
+    target_w = int(width*ratio)
+
+    nbbox = bbox.copy()
+
+    if is_random:
+        start_x = random.randint(0, width - target_w)
+        start_y = random.randint(0, height - target_h)
+    else:
+        start_x = ( width - target_w ) // 2
+        start_y = ( height - target_h ) // 2
+
+    zeros = image[start_y:start_y+target_h,start_x:start_x+target_w,:]
+
+    nbbox[0],nbbox[1] = (bbox[0]-start_x/width)/ratio , (bbox[1]-start_y/height)/ratio
+    nbbox[2],nbbox[3] = bbox[2]/ratio , bbox[3]/ratio
+
+    zeros = cv2.resize(zeros ,(width,height))
+    return zeros,nbbox
 
 def random_flip(image, p=0.5):
     if random.random() < p:
