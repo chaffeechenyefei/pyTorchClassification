@@ -278,7 +278,12 @@ class TrainDatasetTripletBatchAug_BG(Dataset):
         for idxA in pair_idxA:
             item = dfA.iloc[idxA]
             image = load_image(item, self._root)
-            image = rand_bg_resize_crop(image,item.id,imgsize=(self._imgsize,self._imgsize))
+            #real_ comes from matterport, val_ comes from FFE without rles, they are added into training @ this version
+            if item.id.startswith('real') or item.id.startswith('val'):
+                bg_Flag = False
+            else:
+                bg_Flag = True
+            image = rand_bg_resize_crop(image,item.id,imgsize=(self._imgsize,self._imgsize),addBg=bg_Flag)
             lb = int(item.attribute_ids)
             assert (lb < self._class_num)
             images.append(image)
@@ -293,7 +298,11 @@ class TrainDatasetTripletBatchAug_BG(Dataset):
         for idxB in pair_idxB:
             item = dfB.iloc[idxB]
             image = load_image(item, self._root)
-            image = rand_bg_resize_crop(image, item.id, imgsize=(self._imgsize,self._imgsize))
+            if item.id.startswith('real') or item.id.startswith('val'):
+                bg_Flag = False
+            else:
+                bg_Flag = True
+            image = rand_bg_resize_crop(image, item.id, imgsize=(self._imgsize,self._imgsize),addBg=bg_Flag)
             images.append(image)
             lb = int(item.attribute_ids)
             targets.append(lb)
@@ -366,12 +375,14 @@ class TrainDatasetBatchAug_BG_4_BBox(Dataset):
         image = load_image(item, self._root) #[H,W,C]
         image,bbox = rand_bg_resize_crop_withbbox(image, item.id, imgsize=(self._imgsize, self._imgsize))
 
+        # save_img_debug(image, [0.5,0.5,1,1])
+
         bbox = np.array(bbox).reshape(1,4)
 
         return image,bbox
 
 
-        # save_img_debug(image,bbox)
+
 
         #images = [H,W,C]
 
@@ -667,4 +678,7 @@ def save_img_debug(img,bbox):
     pt2 = [ int(bbox_abs[0]+bbox_abs[2]), int(bbox_abs[1]+bbox_abs[3]) ]
     nimg = np.array(img)
     cv2.rectangle(nimg,tuple(pt1),tuple(pt2),(255,0,0),2)
-    cv2.imwrite('m_debug.jpeg',nimg)
+
+    postname = str(random.randint(0,100))
+    save_name = './img_tmp/m_debug_' + postname + '.jpeg'
+    cv2.imwrite(save_name,nimg)

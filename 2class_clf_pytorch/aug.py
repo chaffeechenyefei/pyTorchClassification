@@ -17,13 +17,13 @@ from typing import Union
 #=======================================================================================================================
 #Adding Backgrounds
 #=======================================================================================================================
-df_rle = pd.read_csv('/home/ubuntu/dataset/furniture/rles.csv')
-df_rle.index = df_rle['Id']
-del df_rle['Id']
-flick_path = '/home/ubuntu/dataset/furniture/flickr30k_images/flickr30k_images/'
-flick_list = os.listdir(flick_path)
-flick_list = [l for l in flick_list if 'jpg' in l]
-flick_len = len(flick_list)
+# df_rle = pd.read_csv('/home/ubuntu/dataset/furniture/rles.csv')
+# df_rle.index = df_rle['Id']
+# del df_rle['Id']
+# flick_path = '/home/ubuntu/dataset/furniture/flickr30k_images/flickr30k_images/'
+# flick_list = os.listdir(flick_path)
+# flick_list = [l for l in flick_list if 'jpg' in l]
+# flick_len = len(flick_list)
 
 
 def do_length_decode(rle, H, W, fill_value=255):
@@ -132,7 +132,7 @@ def output_add_bg_img_withbbox(rle, bbox ,img, bg):
 
     img_no_bg = (mask.reshape(h, w, 1) * img).astype('uint8')
 
-    resize_scale = random.uniform(0.3, 1) * bg_h
+    resize_scale = random.uniform(0.4, 0.7) * bg_h
     if w < h:
         new_h = int(resize_scale)
         new_w = int(resize_scale * w / h)
@@ -164,10 +164,10 @@ def output_add_bg_img_withbbox(rle, bbox ,img, bg):
     return bg,nbbox
 
 
-def rand_bg_resize_crop(image,image_id,imgsize=(256,256)):
-    if random.uniform(0, 1) > 0.9:
+def rand_bg_resize_crop(image,image_id,imgsize=(256,256), addBg=True):
+    if random.uniform(0, 1) > 0.9 or not addBg:
         if random.uniform(0, 1) > 0.1:#0.1*0.9 = 0.09
-            ratio = random.uniform(0.6, 0.99)
+            ratio = random.uniform(0.8, 0.99)
             image = cv2.resize(image, imgsize)
             image = random_cropping(image, ratio=ratio, is_random=True)
         else:
@@ -194,22 +194,33 @@ def rand_bg_resize_crop(image,image_id,imgsize=(256,256)):
 
 def rand_bg_resize_crop_withbbox(image,image_id,imgsize=(256,256)):
     rle = df_rle.loc[image_id].values[0]
-    bbox = get_bbox_rle(rle=rle, img=image)  # [wc,hc,width,height]
+    # bbox = get_bbox_rle(rle=rle, img=image)  # [wc,hc,width,height]
+    bbox = [0.5,0.5,1,1]
     # print(bbox)
 
-    if random.uniform(0, 1) > 0.5:  # 0.5*0.9 = 0.45
-        bg_num = random.randint(0, 48)
-        bg = cv2.imread('/home/ubuntu/dataset/furniture/background/' + str(bg_num) + '_bg.png')
-    else:  # 0.45
-        bg_num = random.randint(0, flick_len - 1)
-        bg = cv2.imread(flick_path + flick_list[bg_num])
+    # if random.uniform(0, 1) > 0.5:  # 0.5*0.9 = 0.45
+    #     bg_num = random.randint(0, 48)
+    #     bg = cv2.imread('/home/ubuntu/dataset/furniture/background/' + str(bg_num) + '_bg.png')
+    # else:  # 0.45
+        # bg_num = random.randint(0, flick_len - 1)
+        # bg = cv2.imread(flick_path + flick_list[bg_num])
+
+    bg_num = random.randint(0, 48)
+    bg = cv2.imread('/home/ubuntu/dataset/furniture/background/' + str(bg_num) + '_bg.png')
+    bgh,bgw,_ = bg.shape
+
+    bg_ratio1 = random.uniform(1.0,1.4)
+
+    bg = cv2.resize(bg,(int(bgw*bg_ratio1),int(bgh*bg_ratio1)))
+    bg_ratio2 = random.uniform(0.8,0.99)
+    bg = random_cropping(bg,ratio=bg_ratio2,is_random=True)
 
     image,nbbox = output_add_bg_img_withbbox(rle, bbox,image, bg)
     # print(nbbox)
     image = cv2.resize(image, imgsize)
 
     if random.uniform(0, 1) > 0.1:  # 0.9*0.9 = 0.81
-        ratio = random.uniform(0.8, 0.99)
+        ratio = random.uniform(0.9, 0.99)
         image,nbbox = random_cropping_withbbox(image, bbox = nbbox,ratio=ratio, is_random=True)
 
     image = cv2.resize(image,imgsize)

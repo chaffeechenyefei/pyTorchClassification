@@ -84,6 +84,32 @@ def load_model_with_dict_replace(model:nn.Module, path:Path , old_phs:str , new_
     print('Load model from ' + str(path) )
     return state
 
+def load_model_with_dict(model:nn.Module, path:Path , old_phs:str , new_phs:str='') -> Dict:
+    """
+    load weights from model of layer startwith old_phs and replace it with new_phs
+    :param model: 
+    :param path: 
+    :return: 
+    """
+    device = torch.device('cpu')
+    state = torch.load(str(path),map_location=device)
+    sz_old_phs = len(old_phs)
+
+    cur_state = model.state_dict()
+
+    new_state = OrderedDict()
+    for k,v in state.items():
+        if str(k).startswith(old_phs):
+            name = str(new_phs + k[sz_old_phs:])
+            new_state[name] = v
+        else:
+            pass
+    cur_state.update(new_state)
+    model.load_state_dict(cur_state)
+
+    print('Load model from ' + str(path) )
+    return state
+
 
 def load_par_gpu_model_cpu(model: nn.Module, path: Path) -> Dict:
     device = torch.device('cpu')

@@ -68,7 +68,7 @@ def main():
     run_root = Path(args.run_root)
     #csv for train/test/validate [id,attribute_id,fold,data]
     # folds = pd.read_csv('train_val_test_furniture.csv')
-    folds = pd.read_csv('train_val_test_render.csv')
+    folds = pd.read_csv('train_val_test_render_matterport.csv')
 
     #Not used @this version...
     train_root = TR_DATA_ROOT
@@ -337,8 +337,12 @@ def train(args, model: nn.Module, criterion, *, params,
             valid_metrics = validation(model, criterion, valid_loader, use_cuda)
             write_event(log, step, **valid_metrics)
             valid_loss = valid_metrics['valid_loss']
+            valid_top1 = valid_metrics['valid_top1']
             valid_losses.append(valid_loss)
 
+
+            #tricky
+            valid_loss = valid_top1
             if valid_loss < best_valid_loss:
                 best_valid_loss = valid_loss
                 shutil.copy(str(model_path), str(run_root) + '/model_loss_best.pt')

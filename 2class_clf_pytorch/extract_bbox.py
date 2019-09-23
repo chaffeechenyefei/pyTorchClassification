@@ -9,7 +9,7 @@ from aug import *
 from torch import nn, cuda
 import cv2
 
-
+ClientTest = True
 
 def torch_load_image(patch):
     HWsize = 256
@@ -25,10 +25,11 @@ def torch_load_image(patch):
 
 
 model_root = '/Users/yefeichen/Desktop/Work/Project/pyTorchClassification/2class_clf_pytorch/result/furniture_bbox'
-ckpt = 'model_bbox.pth'
+ckpt = 'model_bbox.ckpt'
 model_name = 'inception_v4'
 
 data_root = '/Users/yefeichen/Database/furniture/furniture_red_tech_new/'
+# data_root = '/Users/yefeichen/Desktop/Work/Downloads/img_tmp/'
 
 print(data_root)
 # N_Cls = 109
@@ -84,8 +85,10 @@ for _file in fileList:
             feat = feat.squeeze()
 
         # feat = feat.data.cpu().numpy()
-        bbox = bbox.sigmoid()
+        # bbox[:,0:1] = bbox[:,0:1].sigmoid()
+        # bbox = torch.sigmoid(bbox)
         bbox = bbox.data.cpu().numpy()
+        # print(bbox)
 
         h,w,c = img.shape
         mybbox = [ w*bbox[0,0] , h*bbox[0,1] , w*bbox[0,2] , h*bbox[0,3] ]

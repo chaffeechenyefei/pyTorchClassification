@@ -310,7 +310,8 @@ def train(args, model: nn.Module, criterion, *, params,
                 feats, outputs= model(inputs)
                 outputs = outputs.squeeze()
                 feats = feats.squeeze()
-                outputs = torch.sigmoid(outputs)
+                # outputs[:,0:1] = torch.sigmoid(outputs[:,0:1])
+                # outputs = torch.sigmoid(outputs)
                 loss = criterion(outputs, targets)
 
                 # loss1 = softmax_loss(outputs, targets)
@@ -374,6 +375,7 @@ def validation(
             # outputs = outputs.squeeze()
             # targets = targets.float()
             outputs = torch.sigmoid(outputs)
+            # outputs[:,0:1] = torch.sigmoid(outputs[:,0:1])
             loss = criterion(outputs, targets)
             # loss = softmax_loss(outputs, targets)
             all_losses.append(loss.data.cpu().numpy())
@@ -409,7 +411,6 @@ def _reduce_loss(loss):
 def softmax_loss(results, labels):
     labels = labels.view(-1)
     loss = F.cross_entropy(results, labels, reduce=True)
-
     return loss
 
 
@@ -420,7 +421,6 @@ def softmax_lossV2(results,labels):
     softmax_results = results[:label_len,:]
     assert(label_len%2==0)
     loss = F.cross_entropy(softmax_results,softmax_label,reduce=True)
-
     return loss
 
 

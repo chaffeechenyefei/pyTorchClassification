@@ -16,7 +16,9 @@ from .dpn import *
 from .maskLayer import maskLayer
 
 from models.dictLayer import DictLayer
-from models.netvlad import NetVladLayer
+from models.netvlad import NetVladLayer,NetVladLayerV2
+
+from utils import load_model_with_dict_replace,load_model_with_dict
 
 __all__ = ['SENet', 'senet154', 'se_resnet50', 'se_resnet101', 'se_resnet152',
            'se_resnext50_32x4d', 'se_resnext101_32x4d']
@@ -43,6 +45,34 @@ def create_net(net_cls, pretrained: bool):
     # else:
     net = net_cls(pretrained=pretrained)
     return net
+
+#===================================================================================================
+#===================================================================================================
+# VGGNet
+#===================================================================================================
+#===================================================================================================
+class VggNetVLAD(nn.Module):
+    def __init__(self, net_cls=M.vgg16, pretrained='imagenet', center_num = 64):
+        super().__init__()
+        basemodel = create_net( net_cls=net_cls, pretrained=pretrained)
+        self.net = nn.Sequential(*list(basemodel.features.children())[:-2])
+        self.vlad = NetVladLayerV2(num_clusters= center_num, dim = 512)
+        self.featLen = center_num*512
+
+    def forward(self, input):
+        x = self.net(input)
+        x = self.vlad(x)
+        return x
+
+    def finetune(self, model_path:str):
+        load_model_with_dict(self.net, model_path, 'encoder.', '')
+        load_model_with_dict(self.vlad, model_path, 'pool.', '')
+
+    def freeze_net(self):
+        for param in self.net.parameters():
+            param.requires_grad = False
+
+
 
 #===================================================================================================
 #===================================================================================================
