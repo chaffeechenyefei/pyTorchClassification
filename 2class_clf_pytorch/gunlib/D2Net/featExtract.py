@@ -174,10 +174,12 @@ def KeyPointMatch(kp1,kp2,desc1,desc2,img1,img2,num_features = 100,hamming=False
 
 
 if __name__ == '__main__':
-    d2_feat = extractKeyPoints_D2Net(model_file='/Users/yefeichen/Desktop/Work/Project/pyTorchClassification/2class_clf_pytorch/result/d2net/d2_tf_no_phototourism.pth')
+    # d2_feat = extractKeyPoints_D2Net(model_file='/Users/yefeichen/Desktop/Work/Project/pyTorchClassification/2class_clf_pytorch/result/d2net/d2_tf_no_phototourism.pth')
+    d2_feat = extractKeyPoints_D2Net(
+        model_file='/home/ubuntu/git/pyTorchClassification/2class_clf_pytorch/result/d2_tf_no_phototourism.pth')
     # imgroot = '/Users/yefeichen/Desktop/Work/Project/d2-net/qualitative/images/pair_1/'
     # imgroot = '/Users/yefeichen/Desktop/Work/Project/PanoramaImageViewer/'
-    imgroot = '/Users/yefeichen/Downloads/'
+    imgroot = '/home/ubuntu/git/pyTorchClassification/2class_clf_pytorch/result/'
     img1 = cv2.imread( pjoin(imgroot,'China-Overseas-International-Center-09192019_095232.jpg'), 1 )
     img2 = cv2.imread( pjoin(imgroot,'China-Overseas-International-Center-09192019_095256.jpg'), 1 )
 
