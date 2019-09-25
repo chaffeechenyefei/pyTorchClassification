@@ -21,7 +21,7 @@ from models.netvlad import NetVladLayer,NetVladLayerV2
 from utils import load_model_with_dict_replace,load_model_with_dict
 
 __all__ = ['SENet', 'senet154', 'se_resnet50', 'se_resnet101', 'se_resnet152',
-           'se_resnext50_32x4d', 'se_resnext101_32x4d']
+           'se_resnext50_32x4d', 'se_resnext101_32x4d','vggnetvlad']
 from collections import OrderedDict
 
 #===================================================================================================
@@ -918,6 +918,7 @@ se_resnet152 = partial(se_resnet152)
 inception_v4 = partial(inceptionv4)
 inception_v4_netvlad = partial(inceptionv4_netvlad)
 inception_v4_attention = partial(inceptionv4_attention)
+vggnetvlad = partial(VggNetVLAD)
 
 
 inceptionresnet_v2 = partial(inceptionresnetv2)

@@ -1,58 +1,28 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from models.netvlad import NetVladLayerV2
+from utils import load_model_with_dict
 
 
-class TripletLoss(nn.Module):
-    """Triplet loss with hard positive/negative mining.
-    Reference:
-    Hermans et al. In Defense of the Triplet Loss for Person Re-Identification. arXiv:1703.07737.
-    Code imported from https://github.com/Cysu/open-reid/blob/master/reid/loss/triplet.py.
-    Args:
-        margin (float): margin for triplet.
-    """
+model_path = '/home/ubuntu/pytorch/2class_clf_pytorch/result/checkpoint.pth.tar'
 
-    def __init__(self, margin=0.3, mutual_flag=False):
-        super(TripletLoss, self).__init__()
-        self.margin = margin
-        self.ranking_loss = nn.MarginRankingLoss(margin=margin)
-        self.mutual = mutual_flag
+tNet = NetVladLayerV2(num_clusters= 64, dim = 512)
+load_model_with_dict(tNet, model_path, 'pool.', '')
 
-    def forward(self, inputs, targets):
-        """
-        Args:
-            inputs: feature matrix with shape (batch_size, feat_dim)
-            targets: ground truth labels with shape (num_classes)
-        """
-        n = inputs.size(0)
-        # inputs = 1. * inputs / (torch.norm(inputs, 2, dim=-1, keepdim=True).expand_as(inputs) + 1e-12)
-        # Compute pairwise distance, replace by the official when merged
-        dist = torch.pow(inputs, 2).sum(dim=1, keepdim=True).expand(n, n)
-        dist = dist + dist.t()
-        dist.addmm_(1, -2, inputs, inputs.t())#1*dist-2*inputs@inputs.t
-        dist = dist.clamp(min=1e-12).sqrt()  # for numerical stability
-        # For each anchor, find the hardest positive and negative
-        mask = targets.expand(n, n).eq(targets.expand(n, n).t())
-        dist_ap, dist_an = [], []
-        for i in range(n):
-            dist_ap.append(dist[i][mask[i]].max().unsqueeze(0))
-            dist_an.append(dist[i][mask[i] == 0].min().unsqueeze(0))
-        dist_ap = torch.cat(dist_ap)
-        dist_an = torch.cat(dist_an)
-        # Compute ranking hinge loss
-        y = torch.ones_like(dist_an)
-        loss = self.ranking_loss(dist_an, dist_ap, y)
-        if self.mutual:
-            return loss, dist
-        return loss
+input = torch.rand(512,512,1,1)
+
+with torch.no_grad():
+    k1 = tNet(input)
+    k2 = tNet(input)
 
 
-batchSz = 64
-featDim = 128
-clsNum = 10
-embeddings = torch.randn((batchSz,featDim))
-ftargets = torch.rand((batchSz,clsNum))
-targets = ftargets.max(1,keepdim=True)
+print((k1-k2).sum())
+
+
+
+
+
 
 
 

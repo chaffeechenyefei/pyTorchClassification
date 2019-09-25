@@ -69,7 +69,7 @@ class NetVladLayerV2(nn.Module):
     """
 
     def __init__(self, num_clusters=64, dim=128, alpha=0.1,
-                 normalize_input=True):
+                 normalize_input=True,do_bias=False):
         """
         Args:
             num_clusters : int
@@ -82,21 +82,24 @@ class NetVladLayerV2(nn.Module):
                 If true, descriptor-wise L2 normalization is applied to input.
         """
         super(NetVladLayerV2, self).__init__()
+        self.do_bias = do_bias
         self.num_clusters = num_clusters
         self.dim = dim
         self.alpha = alpha
         self.normalize_input = normalize_input
-        self.conv = nn.Conv2d(dim, num_clusters, kernel_size=(1, 1), bias=True)
+        self.conv = nn.Conv2d(dim, num_clusters, kernel_size=(1, 1), bias=do_bias)
         self.centroids = nn.Parameter(torch.rand(num_clusters, dim))
         self._init_params()
+
 
     def _init_params(self):
         self.conv.weight = nn.Parameter(
             (2.0 * self.alpha * self.centroids).unsqueeze(-1).unsqueeze(-1)
         )
-        self.conv.bias = nn.Parameter(
-            - self.alpha * self.centroids.norm(dim=1)
-        )
+        if self.do_bias:
+            self.conv.bias = nn.Parameter(
+                - self.alpha * self.centroids.norm(dim=1)
+            )
 
     def forward(self, x):
         N, C = x.shape[:2]

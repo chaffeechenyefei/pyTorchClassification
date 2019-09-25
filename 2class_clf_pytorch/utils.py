@@ -98,7 +98,7 @@ def load_model_with_dict(model:nn.Module, path:Path , old_phs:str , new_phs:str=
     cur_state = model.state_dict()
 
     new_state = OrderedDict()
-    for k,v in state.items():
+    for k,v in state['state_dict'].items():
         if str(k).startswith(old_phs):
             name = str(new_phs + k[sz_old_phs:])
             new_state[name] = v

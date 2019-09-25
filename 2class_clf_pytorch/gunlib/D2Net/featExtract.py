@@ -157,11 +157,15 @@ def HomoRANSACCompute(kp1,kp2,desc1,desc2,hamming=False,flann=False):
             print('Two few matched points')
             return False,None,None,None
 
-def KeyPointMatch(kp1,kp2,desc1,desc2,img1,img2,num_features = 100):
+def KeyPointMatch(kp1,kp2,desc1,desc2,img1,img2,num_features = 100,hamming=False):
+    if hamming:
+        bfType = cv2.NORM_HAMMING
+    else:
+        bfType = cv2.NORM_L2
     draw_params = dict(matchColor=(0, 255, 0),
                        singlePointColor=(255, 0, 0),
                        flags=0)
-    bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
+    bf = cv2.BFMatcher(bfType, crossCheck=True)
     matches = bf.match(desc1, desc2)
     matches = sorted(matches, key=lambda x: x.distance)
     img3 = cv2.drawMatches(img1, kp1, img2, kp2, matches[:num_features-1], None, **draw_params)
@@ -178,7 +182,7 @@ if __name__ == '__main__':
     img2 = cv2.imread( pjoin(imgroot,'China-Overseas-International-Center-09192019_095256.jpg'), 1 )
 
     img1 = cv2.resize(img1,(512,512))
-    img2 = cv2.resize(img2,(512, 512))
+    img2 = cv2.resize(img2,(512,512))
 
 
     ret1 = d2_feat.detect(img1)
@@ -192,14 +196,7 @@ if __name__ == '__main__':
     kp1 = point2Keypoints(keypoints1)
     kp2 = point2Keypoints(keypoints2)
 
-    draw_params = dict(matchColor=(0, 255, 0),
-                       singlePointColor=(255, 0, 0),
-                       flags=0)
-    bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
-    matches = bf.match(desc1, desc2)
-    matches = sorted(matches, key=lambda x: x.distance)
-    img3 = np.array([])
-    img3 = cv2.drawMatches(img1, kp1, img2, kp2, matches[:100], None, **draw_params)
+    img3 = KeyPointMatch(kp1,kp2,desc1,desc2,img1,img2,hamming=False)
     cv2.imwrite('d2net_debug.jpeg', img3)
 
     ret_flag, M, inlier, matches = HomoRANSACCompute(kp1, kp2, desc1, desc2, hamming=False, flann=False)
@@ -219,11 +216,7 @@ if __name__ == '__main__':
     kp1 = point2Keypoints(keypoints1)
     kp2 = point2Keypoints(keypoints2)
 
-    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-    matches = bf.match(desc1, desc2)
-    matches = sorted(matches, key=lambda x: x.distance)
-    img3 = np.array([])
-    img3 = cv2.drawMatches(img1, kp1, img2, kp2, matches[:100], None, **draw_params)
+    img3 = KeyPointMatch(kp1, kp2, desc1, desc2, img1, img2, hamming=True)
     cv2.imwrite('orb_debug.jpeg', img3)
 
     ret_flag, M, inlier, matches = HomoRANSACCompute(kp1, kp2, desc1, desc2, hamming=True, flann=False)
