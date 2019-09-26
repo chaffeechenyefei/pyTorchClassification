@@ -174,57 +174,75 @@ def KeyPointMatch(kp1,kp2,desc1,desc2,img1,img2,num_features = 100,hamming=False
 
 
 if __name__ == '__main__':
-    # d2_feat = extractKeyPoints_D2Net(model_file='/Users/yefeichen/Desktop/Work/Project/pyTorchClassification/2class_clf_pytorch/result/d2net/d2_tf_no_phototourism.pth')
-    d2_feat = extractKeyPoints_D2Net(
-        model_file='/home/ubuntu/git/pyTorchClassification/2class_clf_pytorch/result/d2_tf_no_phototourism.pth')
+    d2_feat = extractKeyPoints_D2Net(model_file='/Users/yefeichen/Desktop/Work/Project/pyTorchClassification/2class_clf_pytorch/result/d2net/d2_tf_no_phototourism.pth')
+    # d2_feat = extractKeyPoints_D2Net(
+    #     model_file='/home/ubuntu/git/pyTorchClassification/2class_clf_pytorch/result/d2_tf_no_phototourism.pth')
     # imgroot = '/Users/yefeichen/Desktop/Work/Project/d2-net/qualitative/images/pair_1/'
     # imgroot = '/Users/yefeichen/Desktop/Work/Project/PanoramaImageViewer/'
-    imgroot = '/home/ubuntu/git/pyTorchClassification/2class_clf_pytorch/result/'
-    img1 = cv2.imread( pjoin(imgroot,'China-Overseas-International-Center-09192019_095232.jpg'), 1 )
-    img2 = cv2.imread( pjoin(imgroot,'China-Overseas-International-Center-09192019_095256.jpg'), 1 )
+    # imgroot = '/home/ubuntu/git/pyTorchClassification/2class_clf_pytorch/result/'
+    imgroot = '/Users/yefeichen/Desktop/Work/Project/PanoramaImageViewer/ww_sample/'
+    saveroot = '/Users/yefeichen/Desktop/Work/Project/PanoramaImageViewer/ww_sample_match/'
 
-    img1 = cv2.resize(img1,(512,512))
-    img2 = cv2.resize(img2,(512,512))
+    imgExt = ['.jpg','.jpeg','.bmp','.png']
 
+    imgList = os.listdir(imgroot)
 
-    ret1 = d2_feat.detect(img1)
-    ret2 = d2_feat.detect(img2)
+    for imgname1 in imgList:
+        for imgname2 in imgList:
+            port1 = os.path.splitext(imgname1)
+            port2 = os.path.splitext(imgname2)
+            if port1[1] in imgExt and port2[1] in imgExt:
+                img1 = cv2.imread( pjoin(imgroot,imgname1), 1 )
+                img2 = cv2.imread( pjoin(imgroot,imgname2), 1 )
 
-    keypoints1 = ret1['keypoints']
-    desc1 = ret1['descriptors']
-    keypoints2 = ret2['keypoints']
-    desc2 = ret2['descriptors']
-
-    kp1 = point2Keypoints(keypoints1)
-    kp2 = point2Keypoints(keypoints2)
-
-    img3 = KeyPointMatch(kp1,kp2,desc1,desc2,img1,img2,hamming=False)
-    cv2.imwrite('d2net_debug.jpeg', img3)
-
-    ret_flag, M, inlier, matches = HomoRANSACCompute(kp1, kp2, desc1, desc2, hamming=False, flann=False)
-
-    print(inlier.sum())
-
-    orb_feat = extractKeyPoints_ORB()
-    ret1 = orb_feat.detect(img1)
-    ret2 = orb_feat.detect(img2)
-
-    keypoints1 = ret1['keypoints']
-    desc1 = ret1['descriptors']
-    keypoints2 = ret2['keypoints']
-    desc2 = ret2['descriptors']
+                img1 = cv2.resize(img1,(512,512))
+                img2 = cv2.resize(img2,(512,512))
 
 
-    kp1 = point2Keypoints(keypoints1)
-    kp2 = point2Keypoints(keypoints2)
+                ret1 = d2_feat.detect(img1)
+                ret2 = d2_feat.detect(img2)
 
-    img3 = KeyPointMatch(kp1, kp2, desc1, desc2, img1, img2, hamming=True)
-    cv2.imwrite('orb_debug.jpeg', img3)
+                keypoints1 = ret1['keypoints']
+                desc1 = ret1['descriptors']
+                keypoints2 = ret2['keypoints']
+                desc2 = ret2['descriptors']
 
-    ret_flag, M, inlier, matches = HomoRANSACCompute(kp1, kp2, desc1, desc2, hamming=True, flann=False)
-    print(inlier.sum())
+                kp1 = point2Keypoints(keypoints1)
+                kp2 = point2Keypoints(keypoints2)
 
-    print('Done')
+                img3 = KeyPointMatch(kp1,kp2,desc1,desc2,img1,img2,hamming=False)
+
+                ret_flag, M, inlier, matches = HomoRANSACCompute(kp1, kp2, desc1, desc2, hamming=False, flann=False)
+
+                inlierNum = inlier.sum()
+                print(inlierNum)
+
+                savename = os.path.join(saveroot,'d2net_'+port1[0]+'+'+port2[0]+ '++' + str(inlierNum) +'.jpg')
+                cv2.imwrite(savename, img3)
+
+                orb_feat = extractKeyPoints_ORB()
+                ret1 = orb_feat.detect(img1)
+                ret2 = orb_feat.detect(img2)
+
+                keypoints1 = ret1['keypoints']
+                desc1 = ret1['descriptors']
+                keypoints2 = ret2['keypoints']
+                desc2 = ret2['descriptors']
+
+
+                kp1 = point2Keypoints(keypoints1)
+                kp2 = point2Keypoints(keypoints2)
+
+                img3 = KeyPointMatch(kp1, kp2, desc1, desc2, img1, img2, hamming=True)
+
+                ret_flag, M, inlier, matches = HomoRANSACCompute(kp1, kp2, desc1, desc2, hamming=True, flann=False)
+                inlierNum = inlier.sum()
+                print(inlierNum)
+
+                savename = os.path.join(saveroot, 'orb_' + port1[0] + '+' + port2[0] + '++' + str(inlierNum) + '.jpg')
+                cv2.imwrite(savename, img3)
+
+                print('Done')
 
     # for kypt in keypoints:
     #     pt = (int(kypt[0]),int(kypt[1]))
