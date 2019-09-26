@@ -1,0 +1,84 @@
+##20190813##
+#Config
+ResNet50 + Avg + FC1024 + Relu + DictLayer 10*128(alpha=0.05) + Fc128 + Softmax 128
+#Loss
+Fc128 -> softmax + ce
+DictLayer 1280 -> triplet loss 0.1
+DictLayer -> dictloss 0.05
+
+--> valid_top5 97.725 | valid_top1 83.608 | valid_f1 0.833 | valid_loss 0.587
+
+code source
+/home/ubuntu/pytorch/2class_clf_pytorch/
+
+
+##20190814##
+#Config
+ResNet50 + Avg + FC1024 + ReLU + FC1024 + ReLU + FC128 + softmax 128
+#Loss
+FC128 -> softmax + ce
+
+--> valid_top5 97.170 | valid_top1 82.428 | valid_f1 0.821 | valid_loss 0.632
+:: We saw a increasement by using DictLayer
+
+
+##20190815##
+#Config
+ResNet50 + Avg + FC1024 + Leaky + FC1024 + Leaky + FC128 + softmax 128
+#Loss
+
+--> valid_top5 97.465 | valid_top1 82.740 | valid_f1 0.824 | valid_loss 0.607
+
+##20190815##
+#Config
+ResNet50 + Avg + FC1024 + Leaky + FC1024 + Leaky + FC128 + softmax 128
+#Loss
+-> model.initial | valid_f1 0.84
+
+
+##20190823##
+#Config
+ResNetBBoxMask::
+ResNet50 -> 4 coords -> MaskLayer -> newInput -> ResNet50 + Avg + FC1024 + Leaky + FC1024 + Leaky + FC128 + softmax 128
+#Loss
+Fc128 -> softmax + ce 0.5
+DictLayer 1024 -> triplet loss 
+"{'valid_f1': 0.7470779236985641, 'valid_loss': 1.3797708, 'valid_top1': 74.73519897460938, 'valid_top5': 93.8704605102539, 'step': 25000, 'dt': '2019-08-23T02:27:08.308639'}"
+
+##20190823## -> furniture_resnet50
+#Config
+ResNet50 + Avg + FC1024 + Leaky + FC1024 + Leaky + FC128 + softmax 128
+#Loss
+valid_top5 97.204 | valid_top1 83.521 | valid_f1 0.834 | valid_loss 0.632 (max 0.84) -> initial
+
+
+##20190910
+inceptionv4_netvlad: Raw Inceptionv4 + conv(1536,32) + netvlad(32,2048)
+valid_top5 82.759 | valid_top1 52.107 | valid_loss 1.858 | valid_f1 0.413
+valid_top5 96.043 | valid_top1 95.324 | valid_f1 0.931 | valid_loss 0.345
+
+##20190910
+inceptionv4_netvlad: yiheng best_trained[freezed] + conv(1535,256) + netvlad(256,64) 
+valid_top5 92.912 | valid_top1 68.582 | valid_loss 1.138 | valid_f1 0.561 ==> model_freeze.pth
+
+inceptionv4_netvlad: yiheng best_trained + conv(1535,256) + netvlad(256,64)  [best model from freezed one]
+valid_top5 86.973 | valid_top1 56.130 | valid_loss 1.599 | valid_f1 0.475 [Epoch 1]
+
+inceptionv4_netvlad: yiheng best_trained + conv(1535,256) + netvlad(256,128)  
+valid_top5 94.828 | valid_top1 69.540 | valid_loss 1.114 | valid_f1 0.601 ==> model_freeze_conv256_k128.pth
+
+inceptionv4_netvlad: yiheng best_trained2
+valid_top5 93.870 | valid_top1 69.732 | valid_loss 1.088 | valid_f1 0.574 ==> max_valid_model_7146.pth
+
+inceptionv4_netvlad: yiheng best_trained2 + conv(1535,256) + netvlad(256,128)  
+valid_top5 95.594 | valid_top1 71.456 | valid_loss 1.068 | valid_f1 0.620 ==> model_freeze_conv256_k128_v2.pth
+best: 72.22% not stored!
+
+Conclusion: netvlad can be used as traditional toolbox where features are fixed and learned from cnn.
+直接attention模型，结果不收敛。freeze cls_net, freeze att_net.radius=0.5，依然无效。
+必须先进行attention模型的预训练。
+
+
+
+
+
