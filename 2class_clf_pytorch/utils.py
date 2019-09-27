@@ -114,16 +114,20 @@ def load_model_with_dict(model:nn.Module, path:Path , old_phs:str , new_phs:str=
 def load_par_gpu_model_cpu(model: nn.Module, path: Path) -> Dict:
     device = torch.device('cpu')
     state = torch.load(str(path),map_location=device)
+    cur_state = model.state_dict()
     # create new OrderedDict that does not contain `module.`
     new_state = OrderedDict()
     for k, v in state['model'].items():
         name = k[7:]  # remove `module.`
         new_state[name] = v
     # load params
-    model.load_state_dict(new_state)
+    cur_state.update(new_state)
+    model.load_state_dict(cur_state)
+    # model.load_state_dict(new_state)
     # model.load_state_dict(state['model'])
     print('Loaded model from epoch {epoch}, step {step:,}'.format(**state))
     return state
+
 
 
 class ThreadingDataLoader(DataLoader):

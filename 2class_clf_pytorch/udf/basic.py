@@ -1,6 +1,6 @@
 from skimage.util import view_as_windows as viewW
 import numpy as np
-
+import pickle
 
 #=======================================================================================================================
 # list -> str
@@ -63,6 +63,16 @@ def im2col_sliding_strided(A, BSZ, stepsize=1):
 def im2col_sliding_strided_v2(A, BSZ, stepsize=1):
     return viewW(A, (BSZ[0],BSZ[1])).reshape(-1,BSZ[0]*BSZ[1]).T[:,::stepsize]
 
+#=======================================================================================================================
+# save almost any objects into file
+#=======================================================================================================================
+def save_obj(obj, name ):
+    with open( name + '.pkl', 'wb') as f:
+        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
+
+def load_obj(name ):
+    with open(name + '.pkl', 'rb') as f:
+        return pickle.load(f)
 
 
 #=======================================================================================================================

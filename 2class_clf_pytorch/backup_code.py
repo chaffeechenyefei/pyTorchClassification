@@ -32,3 +32,16 @@
 #                         {'params': model.conv2.parameters(), 'lr': 0.2},
 #                         {'params': prelu_params, 'lr': 0.02},
 #                         {'params': rest_params, 'lr': 0.3}
+
+
+
+
+##======================================================================================================================
+##solve the problem of path root of package missing like 'No modules named dataset is found'
+##======================================================================================================================
+#solve the problem of path root of package missing like 'No modules named dataset is found'
+# import sys
+# import os
+# curPath = os.path.abspath(os.path.dirname(__file__))
+# rootPath = os.path.split(curPath)[0]
+# sys.path.append(rootPath)

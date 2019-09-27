@@ -1,14 +1,16 @@
 #Example of extracting feature using CPU where model is trained by GPU par
+from sklearn.metrics.pairwise import euclidean_distances,cosine_distances
+
+#solve the problem of path root of package missing like 'No modules named dataset is found'
+import sys
+import os
+curPath = os.path.abspath(os.path.dirname(__file__))
+rootPath = os.path.split(curPath)[0]
+sys.path.append(rootPath)
+
 import models.models as models
 from dataset import *
-from utils import (write_event, load_par_gpu_model_cpu, mean_df, ThreadingDataLoader as DataLoader,
-                   ON_KAGGLE)
-from pathlib import Path
-import torch
-from aug import *
-from torch import nn, cuda
-import cv2
-from sklearn.metrics.pairwise import euclidean_distances,cosine_distances
+
 
 def cosDist(matA:np.ndarray,matB:np.ndarray):
     """
@@ -44,12 +46,13 @@ dataSet = [
     ('/Users/yefeichen/Database/furniture/kkkk/','.jpg'),                           #3
     ('/Users/yefeichen/Database/furniture/Material_China FF_E Material_editor_train/','.jpg'), #4
     ('/Users/yefeichen/Database/furniture/Material_Matterport/','.png'), #5
+    ('/Users/yefeichen/Desktop/Work/Project/PanoramaImageViewer/ww_sample/','.jpg'), #6
            ]
 
 topK = 5
 
-data_root,data_root_ext = dataSet[4]
-test_root,test_root_ext = dataSet[5]
+data_root,data_root_ext = dataSet[6]
+test_root,test_root_ext = dataSet[6]
 # N_Cls = 109
 
 
@@ -118,13 +121,13 @@ for _file in testList:
             kt = kt+1
 
         _portion = os.path.splitext(_file)
-        savePath = os.path.join(test_root,'pair/'+_portion[0]+'_cmp.jpg')
+        savePath = os.path.join(test_root,'pair/'+_portion[0]+ '_' + str(pairDist[idxs[1]]) + '_.jpg')
         print(savePath)
         cv2.imwrite(savePath,img3)
 
         all_img.append(img3)
 
 
-all_img = np.concatenate(all_img,axis=0)
-savePath = os.path.join(test_root,'pair/all_cmp.jpg')
-cv2.imwrite(savePath,all_img)
+# all_img = np.concatenate(all_img,axis=0)
+# savePath = os.path.join(test_root,'pair/all_cmp.jpg')
+# cv2.imwrite(savePath,all_img)
