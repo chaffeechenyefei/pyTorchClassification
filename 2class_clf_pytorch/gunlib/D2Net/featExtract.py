@@ -90,12 +90,18 @@ class extractKeyPoints_ORB(object):
         fact_j = image.shape[1] / resized_image.shape[1] #width
 
         keypoints, descriptors = self.model.detectAndCompute(resized_image,None)
-        keypoints = cv2.KeyPoint_convert(keypoints)
 
-        keypoints[:, 0] *= fact_j
-        keypoints[:, 1] *= fact_i
+
+        if descriptors is not None:
+            keypoints = cv2.KeyPoint_convert(keypoints)
+            keypoints[:, 0] *= fact_j
+            keypoints[:, 1] *= fact_i
+            flag = True
+        else:
+            flag = False
 
         return {
+            'flag': flag,
             'keypoints':keypoints, #[N,2]
             'descriptors':descriptors #[N,feat_dim]
         }
@@ -157,6 +163,96 @@ def HomoRANSACCompute(kp1,kp2,desc1,desc2,hamming=False,flann=False):
             print('Two few matched points')
             return False,None,None,None
 
+def AffineRANSACCompute(kp1,kp2,desc1,desc2,hamming=False,flann=False):
+    MIN_MATCH_COUNT = 10
+    if not flann:
+        if not hamming:
+            bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
+        else:
+            bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+        matches = bf.match(desc1, desc2)
+        # matches = sorted(matches, key=lambda x: x.distance)
+
+        if len(matches) > MIN_MATCH_COUNT:
+            src_pts = np.float32([kp1[m.queryIdx].pt for m in matches
+                                  ]).reshape(-1, 1, 2)
+            dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches
+                                  ]).reshape(-1, 1, 2)
+
+            M, inlierMask = cv2.estimateAffinePartial2D(src_pts, dst_pts)
+            return True, M, inlierMask, matches
+        else:
+            print('Two few matched points')
+            return False,None,None,None
+    else:
+        FLANN_INDEX_KDITREE = 0
+        index_params = dict(algorithm=FLANN_INDEX_KDITREE, tree=5)
+        search_params = dict(checks=50)
+        flann = cv2.FlannBasedMatcher(index_params, search_params)
+        matches = flann.knnMatch(desc1, desc2, k=2)
+
+        good = []
+        for m, n in matches:
+            if m.distance < 0.7 * n.distance:
+                good.append(m)
+
+        if len(good) > MIN_MATCH_COUNT:
+            src_pts = np.float32([kp1[m.queryIdx].pt for m in good
+                                  ]).reshape(-1, 1, 2)
+            dst_pts = np.float32([kp2[m.trainIdx].pt for m in good
+                                  ]).reshape(-1, 1, 2)
+
+            M, inlierMask = cv2.estimateAffinePartial2D(src_pts, dst_pts)
+            return True,M,inlierMask,good
+        else:
+            print('Two few matched points')
+            return False,None,None,None
+
+def FundamentalRANSACCompute(kp1,kp2,desc1,desc2,hamming=False,flann=False):
+    MIN_MATCH_COUNT = 10
+    if not flann:
+        if not hamming:
+            bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
+        else:
+            bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+        matches = bf.match(desc1, desc2)
+        # matches = sorted(matches, key=lambda x: x.distance)
+
+        if len(matches) > MIN_MATCH_COUNT:
+            src_pts = np.float32([kp1[m.queryIdx].pt for m in matches
+                                  ]).reshape(-1, 1, 2)
+            dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches
+                                  ]).reshape(-1, 1, 2)
+
+            M, inlierMask = cv2.findFundamentalMat(src_pts, dst_pts,method=cv2.FM_RANSAC)
+            return True, M, inlierMask, matches
+        else:
+            print('Two few matched points')
+            return False,None,None,None
+    else:
+        FLANN_INDEX_KDITREE = 0
+        index_params = dict(algorithm=FLANN_INDEX_KDITREE, tree=5)
+        search_params = dict(checks=50)
+        flann = cv2.FlannBasedMatcher(index_params, search_params)
+        matches = flann.knnMatch(desc1, desc2, k=2)#k=2 means (m,n) bestMatch vs. betterMatch
+
+        good = []
+        for m, n in matches:
+            if m.distance < 0.8 * n.distance:
+                good.append(m)
+
+        if len(good) > MIN_MATCH_COUNT:
+            src_pts = np.float32([kp1[m.queryIdx].pt for m in good
+                                  ]).reshape(-1, 1, 2)
+            dst_pts = np.float32([kp2[m.trainIdx].pt for m in good
+                                  ]).reshape(-1, 1, 2)
+
+            M, inlierMask = cv2.findFundamentalMat(src_pts, dst_pts, method=cv2.FM_RANSAC)
+            return True,M,inlierMask,good
+        else:
+            print('Two few matched points')
+            return False,None,None,None
+
 def KeyPointMatch(kp1,kp2,desc1,desc2,img1,img2,num_features = 100,hamming=False):
     if hamming:
         bfType = cv2.NORM_HAMMING
@@ -170,7 +266,6 @@ def KeyPointMatch(kp1,kp2,desc1,desc2,img1,img2,num_features = 100,hamming=False
     matches = sorted(matches, key=lambda x: x.distance)
     img3 = cv2.drawMatches(img1, kp1, img2, kp2, matches[:num_features-1], None, **draw_params)
     return img3
-
 
 
 if __name__ == '__main__':
