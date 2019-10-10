@@ -24,9 +24,9 @@ d2_feat = extractKeyPoints_D2Net(
 orb_feat = extractKeyPoints_ORB()
 
 if on_aws:
-    imgroot = '/Users/yefeichen/Database/localization/MatterportPanorama/shanghai_tower_perspective/'
+    imgroot =  '/home/ubuntu/dataset/indoor/db_indoor/'
 else:
-    imgroot = '/home/ubuntu/dataset/indoor/db_indoor/'
+    imgroot = '/Users/yefeichen/Database/localization/MatterportPanorama/shanghai_tower_perspective/'
 saveroot= imgroot
 
 imgExt = ['.jpg', '.jpeg', '.bmp', '.png']

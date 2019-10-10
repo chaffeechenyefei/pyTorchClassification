@@ -80,25 +80,25 @@ for queryname in queryList:
                             cv2.imwrite(savename, img3)
             if singletonTest:
                 break
-    InLier.sort(reverse=True)
+        InLier.sort(reverse=True)
 
-    if InLier is not None and InLier != []:
-        maxInLierNum = InLier[0]
-        InLierOver20 = [v for v in InLier if v >= inlierThreshold]
-        numInLierImg = len(InLierOver20)
-        avgInLierNum = np.array(InLierOver20)
-        avgInLierNum = avgInLierNum.mean()
-    else:
-        maxInLierNum = 0
-        numInLierImg = 0
-        avgInLierNum = 0
+        if InLier is not None and InLier != []:
+            maxInLierNum = InLier[0]
+            InLierOver20 = [v for v in InLier if v >= inlierThreshold]
+            numInLierImg = len(InLierOver20)
+            avgInLierNum = np.array(InLierOver20)
+            avgInLierNum = avgInLierNum.mean()
+        else:
+            maxInLierNum = 0
+            numInLierImg = 0
+            avgInLierNum = 0
 
-    print( queryname + ':' + 'maxInLierNum='+ str(maxInLierNum)
-           + ' numInLierImg=' + str(numInLierImg)
-           + ' avgInLierNum=' + str(avgInLierNum) )
+        print( queryname + ':' + 'maxInLierNum='+ str(maxInLierNum)
+               + ' numInLierImg=' + str(numInLierImg)
+               + ' avgInLierNum=' + str(avgInLierNum) )
 
-    if singletonTest:
-        break
+        if singletonTest:
+            break
 
 
 print('Done')
