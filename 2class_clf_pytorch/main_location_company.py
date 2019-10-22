@@ -270,8 +270,8 @@ def train(args, model: nn.Module, criterion, *, params,
                 featLoc = batch_dat['feat_loc']
                 targets = batch_dat['target']
 
-                print(featComp.shape[1],featLoc.shape[1])
-                
+                print(featComp.shape,featLoc.shape,batch_dat['feat_comp_dim'],batch_dat['feat_loc_dim'])
+
                 if use_cuda:
                     featComp, featLoc, targets = featComp.cuda(), featLoc.cuda(),targets.cuda()
 
