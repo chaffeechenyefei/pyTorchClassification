@@ -601,6 +601,7 @@ def collate_TrainDatasetLocationRS(batch):
     feat_comp = torch.cat(feat_comp, 0)
     feat_loc = torch.cat(feat_loc,0)
     labels = torch.cat(labels,0)
+    print(feat_comp.shape,feat_loc.shape,labels.shape)
 
     assert (feat_loc.shape[0] == labels.shape[0])
     assert (feat_comp.shape[0] == labels.shape[0])
