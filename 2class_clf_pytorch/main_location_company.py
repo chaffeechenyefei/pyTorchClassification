@@ -20,7 +20,7 @@ from torch import nn, cuda
 from torch.optim import Adam, SGD
 import tqdm
 import models.models as models
-from dataset import TrainDataset, TTADataset, get_ids,TrainDatasetLocationRS
+from dataset import TrainDataset, TTADataset, get_ids,TrainDatasetLocationRS,collate_TrainDatasetLocationRS
 from sklearn.metrics import precision_recall_curve, roc_curve, auc
 from utils import (write_event, load_model, load_model_ex_inceptionv4, load_par_gpu_model_gpu, mean_df, ThreadingDataLoader as DataLoader, adjust_learning_rate,
                    ON_KAGGLE)
@@ -93,6 +93,7 @@ def main():
             shuffle=True,
             batch_size=args.batch_size,
             num_workers=args.workers,
+            collate_fn=collate_TrainDatasetLocationRS
         )
 
     #Not used in this version
@@ -270,7 +271,7 @@ def train(args, model: nn.Module, criterion, *, params,
                 featLoc = batch_dat['feat_loc']
                 targets = batch_dat['target']
 
-                print(featComp.shape,featLoc.shape,batch_dat['feat_comp_dim'],batch_dat['feat_loc_dim'])
+                # print(featComp.shape,featLoc.shape,batch_dat['feat_comp_dim'],batch_dat['feat_loc_dim'])
 
                 if use_cuda:
                     featComp, featLoc, targets = featComp.cuda(), featLoc.cuda(),targets.cuda()

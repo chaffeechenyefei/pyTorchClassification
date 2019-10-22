@@ -228,7 +228,7 @@ def collate_TrainDatasetTripletBatchAug(batch):
         if b[0] is None:
             continue
         else:
-            images.extend(b[0])
+            images.extend(b[0]) #extend will transfer torch.[B,C,H,W]->list(torch.[C,H,W])
             labels.extend(b[1])
 
     images = torch.stack(images, 0)  # images : list of [C,H,W] -> [Len_of_list, C, H,W]
@@ -582,6 +582,33 @@ class TrainDatasetLocationRS(Dataset):
                  "feat_comp_dim":FeatComp.shape,
                  "feat_loc_dim":FeatLoc.shape}
 
+
+def collate_TrainDatasetLocationRS(batch):
+    """
+    special collate_fn function for UDF class TrainDatasetTriplet
+    :param batch: 
+    :return: 
+    """
+    feat_comp = []
+    feat_loc = []
+    labels = []
+
+    for b in batch:
+        feat_comp.append(b['feat_comp'])
+        feat_loc.append(b['feat_loc'])
+        labels.append(b['target'])
+
+    feat_comp = torch.cat(feat_comp, 0)
+    feat_loc = torch.cat(feat_loc,0)
+    labels = torch.cat(labels,0)
+
+    assert (feat_loc.shape[0] == labels.shape[0])
+    assert (feat_comp.shape[0] == labels.shape[0])
+    return {
+        "feat_comp": feat_comp,
+        "feat_loc": feat_loc,
+        "target": labels
+    }
 
 class TTADataset:
     def __init__(self, root: Path, df: pd.DataFrame, tta_code , imgsize = 256):
