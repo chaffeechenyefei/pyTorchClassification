@@ -1,3 +1,8 @@
+import os,sys
+curPath = os.path.abspath(os.path.dirname(__file__))
+rootPath = os.path.split(curPath)[0]
+sys.path.append(rootPath)
+
 import argparse
 from itertools import islice
 import json
@@ -14,7 +19,6 @@ import torch
 from torch import nn, cuda
 from torch.optim import Adam, SGD
 import tqdm
-import os
 import models.models as models
 from dataset import TrainDataset, TTADataset, get_ids,TrainDatasetLocationRS
 from sklearn.metrics import precision_recall_curve, roc_curve, auc
@@ -69,7 +73,7 @@ def main():
 
     df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_all.csv'))
     df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat.csv'))
-    df_loc_feat = pd.read_csv('location_feat.csv')
+    df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat.csv'))
 
 
     #Not used @this version...
