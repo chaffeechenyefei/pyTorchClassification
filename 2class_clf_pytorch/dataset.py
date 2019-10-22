@@ -511,6 +511,75 @@ def collate_TrainDatasetSelected(batch):
     labelsA = torch.from_numpy(np.array(labelsA))
     return imagesA,labelsA
 
+#=======================================================================================================================
+# data loader function for company location score
+#=======================================================================================================================
+class TrainDatasetLocationRS(Dataset):
+    def __init__(self, df_comp_feat: pd.DataFrame,
+                 df_loc_feat: pd.DataFrame,
+                 df_pair: pd.DataFrame,
+                 name: str = 'train' , posN = 100, negN=200):
+        super().__init__()
+        self._df_comp_feat = df_comp_feat
+        self._df_loc_feat = df_loc_feat
+        self._df_pair = df_pair
+        self._name = name
+        self._posN = posN
+        self._negN = negN
+
+    def __len__(self):
+        return 10000
+
+    def tbatch(self):
+        return self._posN + self._negN
+
+    def __getitem__(self, idx: int):
+        if self._name == 'train':
+            #sample a part of data from training pair as positive seed
+            dat1 = self._df_pair.sample(n=self._posN).reset_index(drop=True)
+            dat2 = dat1.sample(frac=1).reset_index(drop=True)
+
+            #generate negative sample from positive seed
+            twin_dat = pd.merge(dat1, dat2, on='city', how='left', suffixes=['_left', '_right'])
+            twin_dat = twin_dat[twin_dat['atlas_location_uuid_left'] != twin_dat['atlas_location_uuid_right']]
+            # print(len(twin_dat))
+            # twin_dat.head()
+            neg_dat = twin_dat[['duns_number_left', 'atlas_location_uuid_right']].sample(n=self._negN).reset_index(drop=True)
+            neg_dat = neg_dat.rename(
+                columns={'duns_number_left': 'duns_number', 'atlas_location_uuid_right': 'atlas_location_uuid'})
+            neg_dat['label'] = 0
+            # neg_dat.head()
+            # len(neg_dat)
+            pos_dat = dat1[['duns_number', 'atlas_location_uuid', 'label']]
+            res_dat = pd.concat([pos_dat, neg_dat], axis=0)
+            res_dat = res_dat.sample(frac=1).reset_index(drop=True)
+        else:
+            res_dat = self._df_pair[['duns_number','atlas_location_uuid','label']]
+
+        # concate training pair with location/company feature
+        F_res_dat = pd.merge(res_dat, self._df_comp_feat, on='duns_number', how='left')
+        list_col = list(F_res_dat.columns)
+        list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
+        FeatComp = F_res_dat[list_col].to_numpy()
+
+        F_res_dat = pd.merge(res_dat, self._df_loc_feat, on='atlas_location_uuid', how='left')
+        list_col = list(F_res_dat.columns)
+        list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
+        FeatLoc = F_res_dat[list_col].to_numpy()
+
+        Label = res_dat[['label']].to_numpy()
+
+        # [B,Len_feat],[B,1]
+        assert(len(Label)==len(FeatComp) and len(Label)==len(FeatLoc))
+
+        featComp = torch.from_numpy(FeatComp.astype(np.float))
+        featLoc = torch.from_numpy(FeatLoc.astype(np.float))
+        target = torch.from_numpy(Label.astype(np.int))
+
+        return { "feat_comp": featComp,
+                 "feat_loc": featLoc,
+                 "target": target}
+
 
 class TTADataset:
     def __init__(self, root: Path, df: pd.DataFrame, tta_code , imgsize = 256):

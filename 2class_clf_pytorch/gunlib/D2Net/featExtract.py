@@ -339,6 +339,7 @@ if __name__ == '__main__':
 
                 print('Done')
 
+
     # for kypt in keypoints:
     #     pt = (int(kypt[0]),int(kypt[1]))
     #     cv2.circle(raw_img,pt,3,(255,0,0),2)

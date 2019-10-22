@@ -18,10 +18,10 @@ from .maskLayer import maskLayer
 from models.dictLayer import DictLayer
 from models.netvlad import NetVladLayer,NetVladLayerV2
 
-from utils import load_model_with_dict_replace,load_model_with_dict
+from utils import load_model_with_dict_replace,load_model_with_dict,load_model
 
 __all__ = ['SENet', 'senet154', 'se_resnet50', 'se_resnet101', 'se_resnet152',
-           'se_resnext50_32x4d', 'se_resnext101_32x4d','vggnetvlad']
+           'se_resnext50_32x4d', 'se_resnext101_32x4d','vggnetvlad','location_recommend_model_v1']
 from collections import OrderedDict
 
 #===================================================================================================
@@ -71,6 +71,68 @@ class VggNetVLAD(nn.Module):
     def freeze_net(self):
         for param in self.net.parameters():
             param.requires_grad = False
+
+# ===================================================================================================
+# ===================================================================================================
+# Location Recommendation Model
+# ===================================================================================================
+# ===================================================================================================
+class NaiveDL(nn.Module):
+    """
+    2 class classification model
+    """
+    def __init__(self,feat_comp_dim=102,feat_loc_dim=23):
+        self._common_feat_dim = 64
+        self._feat_comp_dim = feat_comp_dim
+        self._feat_loc_dim = feat_loc_dim
+        self.net_comp = nn.Sequential(
+            nn.Linear(feat_comp_dim,256,bias=True),
+            nn.LeakyReLU(),
+            nn.Linear(256,128,bias=True),
+            nn.LeakyReLU(),
+            nn.Linear(128, self._common_feat_dim, bias=True),
+            nn.LeakyReLU(),
+        )
+
+        self.net_loc = nn.Sequential(
+            nn.Linear(feat_loc_dim,64,bias=True),
+            nn.LeakyReLU(),
+            nn.Linear(64,self._common_feat_dim,bias=True),
+            nn.LeakyReLU(),
+        )
+
+        self.net_shared = nn.Sequential(
+            nn.Linear(2*self._common_feat_dim,self._common_feat_dim,bias=True),
+            nn.LeakyReLU(),
+        )
+
+        self.classifer = nn.Linear(self._common_feat_dim,2,bias=True)
+
+    def forward(self, feat_comp,feat_loc):
+        assert(feat_comp.shape[1]==self._feat_comp_dim)
+        assert(feat_loc.shape[1] == self._feat_loc_dim)
+        common_feat_comp = self.net_comp(feat_comp)
+        common_feat_loc = self.net_loc(feat_loc)
+        concat_feat = torch.cat([common_feat_comp,common_feat_loc],dim=1)
+        feat_comp_loc = self.net_shared(concat_feat)
+        outputs = self.classifer(feat_comp_loc)
+
+        return common_feat_comp,common_feat_loc,feat_comp_loc,outputs
+
+    def finetune(self, model_path:str):
+        load_model(self, model_path)
+
+    def freeze_comp_net(self):
+        for param in self.net_comp.parameters():
+            param.requires_grad = False
+
+    def freeze_loc_net(self):
+        for param in self.net_loc.parameters():
+            param.requires_grad = False
+
+    def freeze_net(self):
+        self.freeze_comp_net()
+        self.freeze_loc_net()
 
 
 
@@ -943,4 +1005,6 @@ densenet161 = partial(DenseNet, net_cls=M.densenet161)
 
 cnntoynet = partial(CnnToyNet)
 cnnvladtoynet = partial(CnnVladToyNet)
+
+location_recommend_model_v1 = partial(NaiveDL)
 

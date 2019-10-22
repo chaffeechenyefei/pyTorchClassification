@@ -1,14 +1,15 @@
 #Example of extracting feature using CPU where model is trained by GPU par
 import models.models as models
 from dataset import *
-from utils import (write_event, load_model, mean_df, ThreadingDataLoader as DataLoader,
-                   ON_KAGGLE)
-from pathlib import Path
-import torch
-from torch import nn, cuda
 import cv2
 from utils import *
-from matplotlib import pyplot as plt
+
+import sys
+import os
+import numpy as np
+curPath = os.path.abspath(os.path.dirname(__file__))
+rootPath = os.path.split(curPath)[0]
+sys.path.append(rootPath)
 
 
 def torch_load_image(patch):
@@ -23,12 +24,8 @@ def torch_load_image(patch):
 
 
 model_root = '/Users/yefeichen/Desktop/Work/Project/pyTorchClassification/2class_clf_pytorch/result/furniture_inception_yiheng/'
-# ckpt = 'model_loss_best6.pt'
-# model_name = 'cnntoynet'
 model_name = 'inception_v4'
-# model_name = 'resnet18V4'
-# model_name = 'resnetvlad18'
-ckpt = 'max_valid_model.pth'
+ckpt = 'max_valid_model_.pth'
 
 
 data_root = '/Users/yefeichen/Database/furniture/ww_furniture_digital/'

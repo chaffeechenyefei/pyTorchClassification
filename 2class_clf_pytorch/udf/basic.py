@@ -74,6 +74,35 @@ def load_obj(name ):
     with open(name + '.pkl', 'rb') as f:
         return pickle.load(f)
 
+#=======================================================================================================================
+# topk accuracy of numpy version
+#=======================================================================================================================
+def calc_topk_acc(QRscore, y_truth, k=3):
+    """
+    QRscore: similarity score matrix shape [Q,R]
+    y_truth: index(related with R) of truth label of Query
+    """
+    max_k_preds = QRscore.argsort(axis=1)[:, -k:][:, ::-1]  # 得到top-k max label
+    match_array = np.logical_or.reduce(max_k_preds == y_truth, axis=1)  # 得到匹配结果
+    topk_acc_score = match_array.sum() / match_array.shape[0]
+    return topk_acc_score
+
+def calc_topk_acc_cat_all(QRscore,y_truth_cat,R_cat,k=3):
+    """
+    QRscore: similarity score matrix shape [Q,R]
+    y_truth: index(related with R) of truth label of Query
+    return: list oftop1-topk acc
+    """
+    res = []
+    y_truth_cat = y_truth_cat.reshape(-1,1)
+    max_k_preds = QRscore.argsort(axis=1)[:, -k:][:, ::-1] #得到top-k max label
+    max_k_cat = R_cat[max_k_preds]
+    M = max_k_cat==y_truth_cat
+    for k in range(M.shape[1]):
+        match_array = np.logical_or.reduce(M[:,:k+1], axis=1) #得到匹配结果
+        topk_acc_score = match_array.sum() / match_array.shape[0]
+        res.append(topk_acc_score)
+    return res
 
 #=======================================================================================================================
 # main
