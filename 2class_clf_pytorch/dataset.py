@@ -578,7 +578,9 @@ class TrainDatasetLocationRS(Dataset):
 
         return { "feat_comp": featComp,
                  "feat_loc": featLoc,
-                 "target": target}
+                 "target": target,
+                 "feat_comp_dim":FeatComp.shape[1],
+                 "feat_loc_dim":FeatLoc.shape[1]}
 
 
 class TTADataset:

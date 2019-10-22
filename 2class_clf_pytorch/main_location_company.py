@@ -269,6 +269,9 @@ def train(args, model: nn.Module, criterion, *, params,
                 featComp = batch_dat['feat_comp']
                 featLoc = batch_dat['feat_loc']
                 targets = batch_dat['target']
+
+                print(featComp.shape[1],featLoc.shape[1])
+                
                 if use_cuda:
                     featComp, featLoc, targets = featComp.cuda(), featLoc.cuda(),targets.cuda()
 
