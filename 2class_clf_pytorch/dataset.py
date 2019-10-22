@@ -557,12 +557,12 @@ class TrainDatasetLocationRS(Dataset):
             res_dat = self._df_pair[['duns_number','atlas_location_uuid','label']]
 
         # concate training pair with location/company feature
-        F_res_dat = pd.merge(res_dat, self._df_comp_feat, on='duns_number', how='left')
+        F_res_dat = pd.merge(res_dat, self._df_comp_feat, on='duns_number', how='left').reset_index(drop=True)
         list_col = list(F_res_dat.columns)
         list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
         FeatComp = F_res_dat[list_col].to_numpy()
 
-        F_res_dat = pd.merge(res_dat, self._df_loc_feat, on='atlas_location_uuid', how='left')
+        F_res_dat = pd.merge(res_dat, self._df_loc_feat, on='atlas_location_uuid', how='left').reset_index(drop=True)
         list_col = list(F_res_dat.columns)
         list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
         print(list_col)
