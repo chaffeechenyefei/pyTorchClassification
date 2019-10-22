@@ -565,6 +565,7 @@ class TrainDatasetLocationRS(Dataset):
         F_res_dat = pd.merge(res_dat, self._df_loc_feat, on='atlas_location_uuid', how='left')
         list_col = list(F_res_dat.columns)
         list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
+        print(list_col)
         FeatLoc = F_res_dat[list_col].to_numpy()
 
         Label = res_dat[['label']].to_numpy()
