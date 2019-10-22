@@ -82,6 +82,7 @@ class NaiveDL(nn.Module):
     2 class classification model
     """
     def __init__(self,feat_comp_dim=102,feat_loc_dim=23):
+        super().__init__()
         self._common_feat_dim = 64
         self._feat_comp_dim = feat_comp_dim
         self._feat_loc_dim = feat_loc_dim

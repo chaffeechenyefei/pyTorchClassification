@@ -96,8 +96,8 @@ def main():
         )
 
     #Not used in this version
-    # criterion = nn.BCEWithLogitsLoss(reduction='none')
-    criterion = nn.CrossEnropyLoss(reduction='none')
+    criterion = nn.BCEWithLogitsLoss(reduction='none')
+    # criterion = nn.CrossEnropyLoss(reduction='none')
 
     # se- ception dpn can only use finetuned model from imagenet
     model = getattr(models, args.model)(feat_comp_dim=102,feat_loc_dim=23)
