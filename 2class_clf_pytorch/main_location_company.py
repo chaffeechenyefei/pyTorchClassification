@@ -14,12 +14,11 @@ import torch.nn.functional as F
 import numpy as np
 import pandas as pd
 from sklearn.metrics import fbeta_score
-from sklearn.exceptions import UndefinedMetricWarning
 import torch
 from torch import nn, cuda
 from torch.optim import Adam, SGD
 import tqdm
-import models.models as models
+import models.location_recommendation as rsmodels
 from dataset import TrainDataset, TTADataset, get_ids,TrainDatasetLocationRS,collate_TrainDatasetLocationRS
 from sklearn.metrics import precision_recall_curve, roc_curve, auc
 from utils import (write_event, load_model, load_model_ex_inceptionv4, load_par_gpu_model_gpu, mean_df, ThreadingDataLoader as DataLoader, adjust_learning_rate,
@@ -107,7 +106,7 @@ def main():
 
     # se- ception dpn can only use finetuned model from imagenet
     # model = getattr(models, args.model)(feat_comp_dim=102, feat_loc_dim=23) #location_recommend_model_v1
-    model = getattr(models, args.model)(feat_comp_dim=102,feat_loc_dim=23,embedding_num=len(loc_name_dict)) #location_recommend_model_v3
+    model = getattr(rsmodels, args.model)(feat_comp_dim=102,feat_loc_dim=23,embedding_num=len(loc_name_dict)) #location_recommend_model_v3
 
     md_path = Path(str(run_root) + '/' + args.ckpt)
     if md_path.exists():
@@ -165,38 +164,38 @@ def main():
 #End of main
 #=============================================================================================================================
 
-#=============================================================================================================================
-#predict
-#=============================================================================================================================
-def predict(model, root: Path, df: pd.DataFrame, out_path: Path,
-            batch_size: int, tta_code:list , workers: int, use_cuda: bool):
-
-    loader = DataLoader(
-        dataset=TTADataset(root, df, tta_code=tta_code),
-        shuffle=False,
-        batch_size=batch_size,
-        num_workers=workers,
-    )
-
-    model.eval()
-    all_outputs, all_ids = [], []
-    with torch.no_grad():
-        for inputs, ids in tqdm.tqdm(loader, desc='Predict'):
-            if use_cuda:
-                inputs = inputs.cuda()
-            outputs = torch.sigmoid(model(inputs))
-            #_, outputs = outputs.topk(1, dim=1, largest=True, sorted=True)
-            all_outputs.append(outputs.data.cpu().numpy())
-            all_ids.extend(ids)
-
-    df = pd.DataFrame(
-        data=np.concatenate(all_outputs),
-        index=all_ids,
-        columns=map(str, range(N_CLASSES)))
-
-    df = mean_df(df)
-    df.to_hdf(out_path, 'prob', index_label='id')
-    print('Saved predictions to %s' % out_path)
+# #=============================================================================================================================
+# #predict
+# #=============================================================================================================================
+# def predict(model, root: Path, df: pd.DataFrame, out_path: Path,
+#             batch_size: int, tta_code:list , workers: int, use_cuda: bool):
+#
+#     loader = DataLoader(
+#         dataset=TTADataset(root, df, tta_code=tta_code),
+#         shuffle=False,
+#         batch_size=batch_size,
+#         num_workers=workers,
+#     )
+#
+#     model.eval()
+#     all_outputs, all_ids = [], []
+#     with torch.no_grad():
+#         for inputs, ids in tqdm.tqdm(loader, desc='Predict'):
+#             if use_cuda:
+#                 inputs = inputs.cuda()
+#             outputs = torch.sigmoid(model(inputs))
+#             #_, outputs = outputs.topk(1, dim=1, largest=True, sorted=True)
+#             all_outputs.append(outputs.data.cpu().numpy())
+#             all_ids.extend(ids)
+#
+#     df = pd.DataFrame(
+#         data=np.concatenate(all_outputs),
+#         index=all_ids,
+#         columns=map(str, range(N_CLASSES)))
+#
+#     df = mean_df(df)
+#     df.to_hdf(out_path, 'prob', index_label='id')
+#     print('Saved predictions to %s' % out_path)
 
 #=============================================================================================================================
 #train
@@ -284,7 +283,8 @@ def train(args, model: nn.Module, criterion, *, params,
                     featComp, featLoc, targets, featId = featComp.cuda(), featLoc.cuda(),targets.cuda(),featId.cuda()
 
                 # common_feat_comp, common_feat_loc, feat_comp_loc, outputs = model(feat_comp=featComp, feat_loc=featLoc)
-                common_feat_comp, common_feat_loc, feat_comp_loc, outputs= model(feat_comp = featComp, feat_loc = featLoc, id_loc = featId)
+                model_output = model(feat_comp = featComp, feat_loc = featLoc, id_loc = featId)
+                outputs = model_output['outputs']
 
                 # outputs = outputs.squeeze()
 
@@ -353,7 +353,8 @@ def validation(
             all_targets.append(targets)#torch@cpu
             if use_cuda:
                 featComp, featLoc, targets, featId = featComp.cuda(), featLoc.cuda(), targets.cuda(), featId.cuda()
-            _, _, _, outputs = model(feat_comp=featComp, feat_loc=featLoc, id_loc = featId)
+            model_output = model(feat_comp=featComp, feat_loc=featLoc, id_loc = featId)
+            outputs = model_output['outputs']
             # outputs = outputs.squeeze()
             # print(outputs.shape,targets.shape)
             # targets = targets.float()
