@@ -300,3 +300,9 @@ def get_loc_feat_by_comp(proc_comp_dat, pair_dat):
     #     tr_feat = tr_feat.fillna(0)
     tr_feat = tr_feat.groupby(['atlas_location_uuid']).mean().drop(columns=['duns_number'])
     return tr_feat
+
+def translocname2dict(loc_feat:pd.DataFrame)->dict:
+    loc_name_dict = loc_feat[['atlas_location_uuid']].groupby('atlas_location_uuid').first().reset_index()
+    k = zip(loc_name_dict['atlas_location_uuid'].values.tolist(), list(range(len(loc_name_dict))))
+    loc_name_dicts = dict(k)
+    return loc_name_dicts

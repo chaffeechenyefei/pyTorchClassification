@@ -13,6 +13,7 @@ from torchvision.transforms import (
 from transforms import tensor_transform
 from aug import *
 from transforms import iaaTransform
+import math
 
 
 # image_size = 256
@@ -518,17 +519,23 @@ class TrainDatasetLocationRS(Dataset):
     def __init__(self, df_comp_feat: pd.DataFrame,
                  df_loc_feat: pd.DataFrame,
                  df_pair: pd.DataFrame,
+                 emb_dict:dict,
                  name: str = 'train' , posN = 100, negN=200):
         super().__init__()
-        self._df_comp_feat = df_comp_feat
-        self._df_loc_feat = df_loc_feat
-        self._df_pair = df_pair
+        self._df_comp_feat = df_comp_feat.fillna(0)
+        self._df_loc_feat = df_loc_feat.fillna(0)
+        self._df_pair = df_pair.reset_index()
         self._name = name
         self._posN = posN
         self._negN = negN
+        self._step = 100
+        self._emb_dict = emb_dict
 
     def __len__(self):
-        return 10000
+        if self._name == 'train':
+            return 1000
+        else:
+            return math.ceil(len(self._df_loc_feat)/self._step)
 
     def tbatch(self):
         return self._posN + self._negN
@@ -554,7 +561,9 @@ class TrainDatasetLocationRS(Dataset):
             res_dat = pd.concat([pos_dat, neg_dat], axis=0)
             res_dat = res_dat.sample(frac=1).reset_index(drop=True)
         else:
-            res_dat = self._df_pair[['duns_number','atlas_location_uuid','label']]
+            inds = idx*self._step
+            inde = min((idx+1)*self._step,len(self._df_loc_feat))
+            res_dat = self._df_pair.loc[inds:inde,['duns_number','atlas_location_uuid','label']]
 
         # concate training pair with location/company feature
         F_res_dat = pd.merge(res_dat, self._df_comp_feat, on='duns_number', how='left')
@@ -565,21 +574,30 @@ class TrainDatasetLocationRS(Dataset):
         F_res_dat = pd.merge(res_dat, self._df_loc_feat, on='atlas_location_uuid', how='left')
         list_col = list(self._df_loc_feat.columns)
         list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
-        print(list_col)
+        # print(list_col)
         FeatLoc = F_res_dat[list_col].to_numpy()
+
+        #trans id(str) 2 Long
+        loc_name_str = res_dat['atlas_location_uuid'].values.tolist()
+        loc_name_int = [ self._emb_dict[n] for n in loc_name_str ]
+
+
 
         Label = res_dat[['label']].to_numpy()
 
         # [B,Len_feat],[B,1]
         assert(len(Label)==len(FeatComp) and len(Label)==len(FeatLoc))
+        # print(Label.sum(), FeatLoc.sum(),FeatComp.sum())
 
-        featComp = torch.from_numpy(FeatComp.astype(np.float))
-        featLoc = torch.from_numpy(FeatLoc.astype(np.float))
-        target = torch.from_numpy(Label.astype(np.int))
+        featComp = torch.FloatTensor(FeatComp)
+        featLoc = torch.FloatTensor(FeatLoc)
+        featId = torch.LongTensor(loc_name_int).reshape(-1,1)
+        target = torch.LongTensor(Label)
 
         return { "feat_comp": featComp,
                  "feat_loc": featLoc,
                  "target": target,
+                 "feat_id":featId,
                  "feat_comp_dim":FeatComp.shape,
                  "feat_loc_dim":FeatLoc.shape}
 
@@ -592,23 +610,28 @@ def collate_TrainDatasetLocationRS(batch):
     """
     feat_comp = []
     feat_loc = []
+    feat_id = []
     labels = []
 
     for b in batch:
         feat_comp.append(b['feat_comp'])
         feat_loc.append(b['feat_loc'])
+        feat_id.append(b['feat_id'])
         labels.append(b['target'])
 
     feat_comp = torch.cat(feat_comp, 0)
     feat_loc = torch.cat(feat_loc,0)
+    feat_id = torch.cat(feat_id,0)
     labels = torch.cat(labels,0)
-    print(feat_comp.shape,feat_loc.shape,labels.shape)
+    # print(feat_comp.shape,feat_loc.shape,labels.shape)
 
     assert (feat_loc.shape[0] == labels.shape[0])
     assert (feat_comp.shape[0] == labels.shape[0])
+    assert (feat_id.shape[0] == labels.shape[0])
     return {
         "feat_comp": feat_comp,
         "feat_loc": feat_loc,
+        "feat_id": feat_id,
         "target": labels
     }
 

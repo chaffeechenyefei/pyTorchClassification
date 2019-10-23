@@ -24,6 +24,7 @@ from dataset import TrainDataset, TTADataset, get_ids,TrainDatasetLocationRS,col
 from sklearn.metrics import precision_recall_curve, roc_curve, auc
 from utils import (write_event, load_model, load_model_ex_inceptionv4, load_par_gpu_model_gpu, mean_df, ThreadingDataLoader as DataLoader, adjust_learning_rate,
                    ON_KAGGLE)
+from gunlib.company_location_score_lib import translocname2dict
 
 from models.utils import *
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
@@ -46,7 +47,7 @@ def main():
     arg('--mode', choices=['train', 'validate', 'predict_valid', 'predict_test'], default='train')
     arg('--run_root', default='result/location_company')
     arg('--fold', type=int, default=0)
-    arg('--model', default='location_recommend_model_v1')
+    arg('--model', default='location_recommend_model_v3')
     arg('--ckpt', type=str, default='model_loss_best.pt')
     arg('--pretrained', type=str, default='imagenet')#resnet 1, resnext imagenet
     arg('--batch-size', type=int, default=1)
@@ -72,8 +73,9 @@ def main():
     run_root = Path(args.run_root)
 
     df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_all.csv'))
-    df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat.csv'))
-    df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat.csv'))
+    df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat.csv'),index_col=0)
+    df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat.csv'),index_col=0)
+    #col error 'unnamed:0'
 
 
     #Not used @this version...
@@ -84,11 +86,14 @@ def main():
     df_train_pair = df_all_pair[df_all_pair['fold'] == 0]
     df_valid_pair = df_all_pair[df_all_pair['fold'] == 2]
 
+    loc_name_dict = translocname2dict(df_loc_feat)
+
     ##::DataLoader
-    def make_loader(df_comp_feat: pd.DataFrame, df_loc_feat: pd.DataFrame, df_pair: pd.DataFrame,
+    def make_loader(df_comp_feat: pd.DataFrame, df_loc_feat: pd.DataFrame, df_pair: pd.DataFrame, emb_dict:dict,
                     name='train') -> DataLoader:
         return DataLoader(
-            TrainDatasetLocationRS(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_pair, name=name,
+            TrainDatasetLocationRS(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_pair,
+                                   emb_dict=emb_dict, name=name,
                                    negN=200, posN=100),
             shuffle=True,
             batch_size=args.batch_size,
@@ -98,10 +103,11 @@ def main():
 
     #Not used in this version
     criterion = nn.BCEWithLogitsLoss(reduction='none')
-    # criterion = nn.CrossEnropyLoss(reduction='none')
+    # criterion = nn.CrossEntropyLoss(reduction='none')
 
     # se- ception dpn can only use finetuned model from imagenet
-    model = getattr(models, args.model)(feat_comp_dim=102,feat_loc_dim=23)
+    # model = getattr(models, args.model)(feat_comp_dim=102, feat_loc_dim=23) #location_recommend_model_v1
+    model = getattr(models, args.model)(feat_comp_dim=102,feat_loc_dim=23,embedding_num=len(loc_name_dict)) #location_recommend_model_v3
 
     md_path = Path(str(run_root) + '/' + args.ckpt)
     if md_path.exists():
@@ -128,8 +134,8 @@ def main():
         Path(str(run_root) + '/params.json').write_text(
             json.dumps(vars(args), indent=4, sort_keys=True))
 
-        train_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_train_pair, name='train')
-        valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_valid_pair, name='valid')
+        train_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_train_pair, emb_dict=loc_name_dict, name='train')
+        valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_valid_pair, emb_dict=loc_name_dict, name='valid')
 
         train_kwargs = dict(
             args=args,
@@ -146,7 +152,7 @@ def main():
 
     elif args.mode == 'validate':
         valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_valid_pair,
-                                   name='valid')
+                                   emb_dict=loc_name_dict, name='valid')
         # if args.finetuning:
         #     pass
         # else:
@@ -269,21 +275,23 @@ def train(args, model: nn.Module, criterion, *, params,
             for i, batch_dat in enumerate(tl):#enumerate() turns tl into index, ele_of_tl
                 featComp = batch_dat['feat_comp']
                 featLoc = batch_dat['feat_loc']
+                featId = batch_dat['feat_id']
                 targets = batch_dat['target']
 
                 # print(featComp.shape,featLoc.shape,batch_dat['feat_comp_dim'],batch_dat['feat_loc_dim'])
 
                 if use_cuda:
-                    featComp, featLoc, targets = featComp.cuda(), featLoc.cuda(),targets.cuda()
+                    featComp, featLoc, targets, featId = featComp.cuda(), featLoc.cuda(),targets.cuda(),featId.cuda()
 
-                common_feat_comp, common_feat_loc, feat_comp_loc, outputs= model(feat_comp = featComp, feat_loc = featLoc)
+                # common_feat_comp, common_feat_loc, feat_comp_loc, outputs = model(feat_comp=featComp, feat_loc=featLoc)
+                common_feat_comp, common_feat_loc, feat_comp_loc, outputs= model(feat_comp = featComp, feat_loc = featLoc, id_loc = featId)
 
-                outputs = outputs.squeeze()
+                # outputs = outputs.squeeze()
 
                 loss1 = softmax_loss(outputs, targets)
                 # loss2 = TripletLossV1(margin=0.5)(feats,targets)
-
-                loss = loss1
+                # loss1 = criterion(outputs,targets)
+                loss = 1.0*loss1
 
                 batch_size = featComp.size(0)
 
@@ -309,13 +317,13 @@ def train(args, model: nn.Module, criterion, *, params,
             write_event(log, step, **valid_metrics)
             valid_loss = valid_metrics['valid_loss']
             valid_top1 = valid_metrics['valid_top1']
-            valid_roc = valid_metrics['roc']
+            valid_roc = valid_metrics['auc']
             valid_losses.append(valid_loss)
 
 
             #tricky
             valid_loss = valid_roc
-            if valid_loss < best_valid_loss:
+            if valid_loss > best_valid_loss:#roc:bigger is better
                 best_valid_loss = valid_loss
                 shutil.copy(str(model_path), str(run_root) + '/model_loss_best.pt')
 
@@ -340,12 +348,14 @@ def validation(
         for batch_dat in valid_loader:
             featComp = batch_dat['feat_comp']
             featLoc = batch_dat['feat_loc']
+            featId = batch_dat['feat_id']
             targets = batch_dat['target']
             all_targets.append(targets)#torch@cpu
             if use_cuda:
-                featComp, featLoc, targets = featComp.cuda(), featLoc.cuda(), targets.cuda()
-            _, _, _, outputs = model(feat_comp=featComp, feat_loc=featLoc)
-            outputs = outputs.squeeze()
+                featComp, featLoc, targets, featId = featComp.cuda(), featLoc.cuda(), targets.cuda(), featId.cuda()
+            _, _, _, outputs = model(feat_comp=featComp, feat_loc=featLoc, id_loc = featId)
+            # outputs = outputs.squeeze()
+            # print(outputs.shape,targets.shape)
             # targets = targets.float()
             # loss = criterion(outputs, targets)
             loss = softmax_loss(outputs, targets)
@@ -356,11 +366,11 @@ def validation(
     print('all_predictions.shape: ')
     print(all_predictions.shape)
 
+    all_predictions2 = all_predictions[:, 1].data.cpu().numpy()
+
     acc = topkAcc(all_predictions,all_targets.cuda(),topk=(1,))
 
     value, all_predictions = all_predictions.topk(1, dim=1, largest=True, sorted=True)
-
-    all_predictions2 = all_predictions[:,1].data.cpu().numpy()
 
     all_predictions = all_predictions.data.cpu().numpy()
     all_targets =all_targets.data.cpu().numpy()
