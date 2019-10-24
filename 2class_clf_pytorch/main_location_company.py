@@ -66,7 +66,7 @@ def main():
     arg('--cos_sim_loss',action='store_true')
 
     #cuda version T/F
-    use_cuda = cufda.is_available()
+    use_cuda = cuda.is_available()
 
     args = parser.parse_args()
     #run_root: model/weights root
