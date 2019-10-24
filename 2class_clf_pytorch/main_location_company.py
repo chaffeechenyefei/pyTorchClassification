@@ -63,9 +63,10 @@ def main():
     arg('--limit', type=int)
     arg('--imgsize',type=int, default = 256)
     arg('--finetuning',action='store_true')
+    arg('--cos_sim_loss',action='store_true')
 
     #cuda version T/F
-    use_cuda = cuda.is_available()
+    use_cuda = cufda.is_available()
 
     args = parser.parse_args()
     #run_root: model/weights root
@@ -101,8 +102,9 @@ def main():
         )
 
     #Not used in this version
-    criterion = nn.BCEWithLogitsLoss(reduction='none')
+    # criterion = nn.BCEWithLogitsLoss(reduction='none')
     # criterion = nn.CrossEntropyLoss(reduction='none')
+    criterion = nn.CosineEmbeddingLoss(0.2,reduce=True,reduction='mean')
 
     # se- ception dpn can only use finetuned model from imagenet
     # model = getattr(models, args.model)(feat_comp_dim=102, feat_loc_dim=23) #location_recommend_model_v1
@@ -224,7 +226,7 @@ def train(args, model: nn.Module, criterion, *, params,
     else:
         epoch = 1
         step = 0
-        best_valid_loss = float('inf')
+        best_valid_loss = 0.0#float('inf')
         best_f1 = 0
 
 
@@ -291,7 +293,16 @@ def train(args, model: nn.Module, criterion, *, params,
                 loss1 = softmax_loss(outputs, targets)
                 # loss2 = TripletLossV1(margin=0.5)(feats,targets)
                 # loss1 = criterion(outputs,targets)
-                loss = 1.0*loss1
+
+
+                if args.cos_sim_loss:
+                    out_comp_feat = model_output['comp_feat']
+                    out_loc_feat = model_output['loc_feat']
+                    cos_targets = 2*targets-1
+                    loss2 = criterion(out_comp_feat,out_loc_feat,cos_targets)
+                    loss = 0.5*loss1+0.5*loss2
+                else:
+                    loss = 1.0*loss1
 
                 batch_size = featComp.size(0)
 
