@@ -298,7 +298,7 @@ def train(args, model: nn.Module, criterion, *, params,
                 if args.cos_sim_loss:
                     out_comp_feat = model_output['comp_feat']
                     out_loc_feat = model_output['loc_feat']
-                    cos_targets = 2*targets-1
+                    cos_targets = 2*targets.float()-1.0
                     loss2 = criterion(out_comp_feat,out_loc_feat,cos_targets)
                     loss = 0.5*loss1+0.5*loss2
                 else:

@@ -301,7 +301,7 @@ class NaiveDLCosineLosswKemb(nn.Module):
         self._common_feat_dim = 96
         self._embedding_dict_dim = 80
         self._embedding_dict_num = 10
-        self._embedding_dim = self._embedding_dim*self._embedding_dict_num
+        self._embedding_dim = self._embedding_dict_dim*self._embedding_dict_num
 
         self._embedding_num = embedding_num
         self._feat_comp_dim = feat_comp_dim
@@ -336,7 +336,7 @@ class NaiveDLCosineLosswKemb(nn.Module):
         v_loc = v_loc.unsqueeze(dim=1) #[B,1,16]
 
         v_loc_b = v_loc.expand(-1,self._embedding_dict_num,-1)#[B,K,16]
-        v_emb = v_emb.view(-1,self._embedding_dict_num,self._embedding_dim)#[B,K,80]
+        v_emb = v_emb.view(-1,self._embedding_dict_num,self._embedding_dict_dim)#[B,K,80]
 
         v_loc_concat = torch.cat([v_loc_b,v_emb],dim=2)#[B,K,96]
 
