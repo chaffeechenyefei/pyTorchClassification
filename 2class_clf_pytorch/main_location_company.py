@@ -19,9 +19,9 @@ from torch import nn, cuda
 from torch.optim import Adam, SGD
 import tqdm
 import models.location_recommendation as rsmodels
-from dataset import TrainDataset, TTADataset, get_ids,TrainDatasetLocationRS,collate_TrainDatasetLocationRS
+from dataset import TrainDatasetLocationRS,collate_TrainDatasetLocationRS
 from sklearn.metrics import precision_recall_curve, roc_curve, auc
-from utils import (write_event, load_model, load_model_ex_inceptionv4, load_par_gpu_model_gpu, mean_df, ThreadingDataLoader as DataLoader, adjust_learning_rate,
+from utils import (write_event, load_model, ThreadingDataLoader as DataLoader, adjust_learning_rate,
                    ON_KAGGLE)
 from gunlib.company_location_score_lib import translocname2dict
 
@@ -60,10 +60,10 @@ def main():
     arg('--tta', type=int, default=1)
     arg('--use-sample', action='store_true', help='use a sample of the dataset')
     arg('--debug', action='store_true')
-    arg('--limit', type=int)
     arg('--imgsize',type=int, default = 256)
     arg('--finetuning',action='store_true')
     arg('--cos_sim_loss',action='store_true')
+    arg('--ensemble', action='store_true')
 
     #cuda version T/F
     use_cuda = cuda.is_available()
@@ -75,8 +75,18 @@ def main():
     df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_all.csv'))
     df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat.csv'),index_col=0)
     df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat.csv'),index_col=0)
-    #col error 'unnamed:0'
 
+
+    if args.ensemble:
+        df_ensemble = []
+        ensemble_score = ['PA_comp_loc_score_exclude_self.csv','SJ_comp_loc_score_exclude_self.csv','SF_comp_loc_score_exclude_self.csv']
+        for i in range(len(ensemble_score)):
+            df_ensemble.append(pd.read_csv(pjoin(TR_DATA_ROOT,ensemble_score[i])))
+        df_ensemble = pd.concat(df_ensemble,axis=0).reset_index(drop=True)
+    else:
+        df_ensemble = pd.DataFrame(columns=['Blank'])
+
+    #col error 'unnamed:0'
 
     #Not used @this version...
     train_root = TR_DATA_ROOT
@@ -89,11 +99,11 @@ def main():
     loc_name_dict = translocname2dict(df_loc_feat)
 
     ##::DataLoader
-    def make_loader(df_comp_feat: pd.DataFrame, df_loc_feat: pd.DataFrame, df_pair: pd.DataFrame, emb_dict:dict,
-                    name='train') -> DataLoader:
+    def make_loader(df_comp_feat: pd.DataFrame, df_loc_feat: pd.DataFrame, df_pair: pd.DataFrame, emb_dict:dict,df_ensemble,
+                    name='train',flag_ensemble=args.ensemble) -> DataLoader:
         return DataLoader(
-            TrainDatasetLocationRS(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_pair,
-                                   emb_dict=emb_dict, name=name,
+            TrainDatasetLocationRS(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_pair,df_ensemble_score=df_ensemble,
+                                   emb_dict=emb_dict, name=name,flag_ensemble=flag_ensemble,
                                    negN=200, posN=100),
             shuffle=True,
             batch_size=args.batch_size,
@@ -135,8 +145,8 @@ def main():
         Path(str(run_root) + '/params.json').write_text(
             json.dumps(vars(args), indent=4, sort_keys=True))
 
-        train_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_train_pair, emb_dict=loc_name_dict, name='train')
-        valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_valid_pair, emb_dict=loc_name_dict, name='valid')
+        train_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_train_pair, emb_dict=loc_name_dict, df_ensemble=df_ensemble, name='train')
+        valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_valid_pair, emb_dict=loc_name_dict, df_ensemble=df_ensemble, name='valid')
 
         train_kwargs = dict(
             args=args,
@@ -153,7 +163,7 @@ def main():
 
     elif args.mode == 'validate':
         valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_valid_pair,
-                                   emb_dict=loc_name_dict, name='valid')
+                                   emb_dict=loc_name_dict,df_ensemble=df_ensemble, name='valid')
         # if args.finetuning:
         #     pass
         # else:
@@ -277,15 +287,16 @@ def train(args, model: nn.Module, criterion, *, params,
                 featComp = batch_dat['feat_comp']
                 featLoc = batch_dat['feat_loc']
                 featId = batch_dat['feat_id']
+                featEnsemble = batch_dat['feat_ensemble_score']
                 targets = batch_dat['target']
 
                 # print(featComp.shape,featLoc.shape,batch_dat['feat_comp_dim'],batch_dat['feat_loc_dim'])
 
                 if use_cuda:
-                    featComp, featLoc, targets, featId = featComp.cuda(), featLoc.cuda(),targets.cuda(),featId.cuda()
+                    featComp, featLoc, targets, featId,featEnsemble = featComp.cuda(), featLoc.cuda(),targets.cuda(),featId.cuda(),featEnsemble.cuda()
 
                 # common_feat_comp, common_feat_loc, feat_comp_loc, outputs = model(feat_comp=featComp, feat_loc=featLoc)
-                model_output = model(feat_comp = featComp, feat_loc = featLoc, id_loc = featId)
+                model_output = model(feat_comp = featComp, feat_loc = featLoc, id_loc = featId,feat_ensemble_score=featEnsemble)
                 outputs = model_output['outputs']
 
                 # outputs = outputs.squeeze()
@@ -361,10 +372,11 @@ def validation(
             featLoc = batch_dat['feat_loc']
             featId = batch_dat['feat_id']
             targets = batch_dat['target']
+            featEnsemble = batch_dat['feat_ensemble_score']
             all_targets.append(targets)#torch@cpu
             if use_cuda:
                 featComp, featLoc, targets, featId = featComp.cuda(), featLoc.cuda(), targets.cuda(), featId.cuda()
-            model_output = model(feat_comp=featComp, feat_loc=featLoc, id_loc = featId)
+            model_output = model(feat_comp=featComp, feat_loc=featLoc, id_loc = featId,feat_ensemble_score=featEnsemble)
             outputs = model_output['outputs']
             # outputs = outputs.squeeze()
             # print(outputs.shape,targets.shape)

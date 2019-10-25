@@ -114,6 +114,7 @@ class NaiveDLwEmbedding(nn.Module):
         )
 
         self.net_shared = nn.Sequential(
+            nn.Dropout(p=0.1),
             nn.Linear(self._common_feat_dim, self._common_feat_dim, bias=True),
             nn.LeakyReLU(),
         )
@@ -247,12 +248,13 @@ class NaiveDeepWide(nn.Module):
     2 class classification model for deep and wide
     """
 
-    def __init__(self, feat_comp_dim=102, feat_loc_dim=23, embedding_num=2405):
+    def __init__(self, feat_comp_dim=102, feat_loc_dim=23, embedding_num=2405, feat_ensemble_dim=0):
         super().__init__()
         self._embedding_dim = 64
         self._embedding_num = embedding_num
         self._feat_comp_dim = feat_comp_dim
         self._feat_loc_dim = feat_loc_dim
+        self._feat_ensemble_dim = feat_ensemble_dim
 
 
         self._deep_feat_dim = 64
@@ -264,7 +266,7 @@ class NaiveDeepWide(nn.Module):
         )
 
         self.net_shared = nn.Sequential(
-            nn.Linear(self._wide_feat_dim + self._embedding_dim,64),
+            nn.Linear(self._wide_feat_dim + self._deep_feat_dim + self._feat_ensemble_dim,64),
             nn.Dropout(p=0.1),
             nn.LeakyReLU(),
         )
@@ -273,22 +275,22 @@ class NaiveDeepWide(nn.Module):
             nn.Linear(64,2),
         )
 
-    def forward(self,feat_comp, feat_loc, id_loc):
+    def forward(self,feat_comp, feat_loc, id_loc, feat_ensemble_score=None):
         wide_feat = torch.cat([feat_comp,feat_loc],dim=1)
         embed_feat = self.net_emb(id_loc).view(-1, self._embedding_dim)
-        embed_feat = self.net_deep(embed_feat)
-        all_feat = torch.cat([wide_feat,embed_feat],dim=1)
+        deep_feat = self.net_deep(embed_feat)
+        if feat_ensemble_score is not None and self._feat_ensemble_dim == feat_ensemble_score.shape[1]:
+            all_feat = torch.cat([wide_feat,deep_feat,feat_ensemble_score],dim=1)
+        else:
+            all_feat = torch.cat([wide_feat,deep_feat],dim=1)
         all_feat = self.net_shared(all_feat)
         outputs = self.classifer(all_feat)
 
         return {
             'outputs' : outputs,
             'wide_feat' : wide_feat,
-            'embed_feat' : embed_feat
+            'deep_feat' : deep_feat
         }
-
-    def finetune(self, model_path: str):
-        load_model(self, model_path)
 
 
 class NaiveDLCosineLosswKemb(nn.Module):
@@ -323,7 +325,11 @@ class NaiveDLCosineLosswKemb(nn.Module):
             nn.LeakyReLU(),
         )
 
-        self.classifer = nn.Linear(self._common_feat_dim, 2, bias=False)
+        self.classifer = nn.Sequential(
+            nn.Dropout(p=0.1),
+            nn.Linear(self._common_feat_dim, 2, bias=False)
+        )
+
 
     def forward(self, feat_comp, feat_loc, id_loc):
         assert (feat_comp.shape[1] == self._feat_comp_dim)
@@ -370,3 +376,4 @@ location_recommend_model_v2 = partial(NaiveDLwEmbedding_concat)
 location_recommend_model_v3 = partial(NaiveDLwEmbedding)
 location_recommend_model_v4 = partial(NaiveDeepWide)
 location_recommend_model_v5 = partial(NaiveDLCosineLosswKemb)
+location_recommend_model_v6 = partial(NaiveDeepWide) #They use similar structure

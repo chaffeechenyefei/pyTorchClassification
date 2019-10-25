@@ -519,17 +519,20 @@ class TrainDatasetLocationRS(Dataset):
     def __init__(self, df_comp_feat: pd.DataFrame,
                  df_loc_feat: pd.DataFrame,
                  df_pair: pd.DataFrame,
+                 df_ensemble_score, flag_ensemble:bool,
                  emb_dict:dict,
                  name: str = 'train' , posN = 100, negN=200):
         super().__init__()
         self._df_comp_feat = df_comp_feat.fillna(0)
         self._df_loc_feat = df_loc_feat.fillna(0)
         self._df_pair = df_pair.reset_index()
+        self._df_ensemble_score = df_ensemble_score.reset_index(drop=True)
         self._name = name
         self._posN = posN
         self._negN = negN
         self._step = 100
         self._emb_dict = emb_dict
+        self._flag_ensemble = flag_ensemble
 
     def __len__(self):
         if self._name == 'train':
@@ -577,6 +580,15 @@ class TrainDatasetLocationRS(Dataset):
         # print(list_col)
         FeatLoc = F_res_dat[list_col].to_numpy()
 
+        if self._flag_ensemble:
+            F_res_dat = pd.merge(res_dat, self._df_ensemble_score, on=['atlas_location_uuid','duns_number'],how='left')
+            list_col = list(self._df_ensemble_score.columns)
+            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
+            # print(list_col)
+            FeatEnsembleScore = F_res_dat[list_col].to_numpy()
+        else:
+            FeatEnsembleScore = np.ones((len(F_res_dat,1)),dtype=np.float32)
+
         #trans id(str) 2 Long
         loc_name_str = res_dat['atlas_location_uuid'].values.tolist()
         loc_name_int = [ self._emb_dict[n] for n in loc_name_str ]
@@ -591,6 +603,7 @@ class TrainDatasetLocationRS(Dataset):
 
         featComp = torch.FloatTensor(FeatComp)
         featLoc = torch.FloatTensor(FeatLoc)
+        featEnsembleScore = torch.FloatTensor(FeatEnsembleScore)
         featId = torch.LongTensor(loc_name_int).reshape(-1,1)
         target = torch.LongTensor(Label)
 
@@ -598,6 +611,7 @@ class TrainDatasetLocationRS(Dataset):
                  "feat_loc": featLoc,
                  "target": target,
                  "feat_id":featId,
+                 "feat_ensemble_score":featEnsembleScore,
                  "feat_comp_dim":FeatComp.shape,
                  "feat_loc_dim":FeatLoc.shape}
 
@@ -611,27 +625,32 @@ def collate_TrainDatasetLocationRS(batch):
     feat_comp = []
     feat_loc = []
     feat_id = []
+    feat_ensemble_score = []
     labels = []
 
     for b in batch:
         feat_comp.append(b['feat_comp'])
         feat_loc.append(b['feat_loc'])
         feat_id.append(b['feat_id'])
+        feat_ensemble_score.append(b['feat_ensemble_score'])
         labels.append(b['target'])
 
     feat_comp = torch.cat(feat_comp, 0)
     feat_loc = torch.cat(feat_loc,0)
     feat_id = torch.cat(feat_id,0)
+    feat_ensemble_score = torch.cat(feat_ensemble_score,0)
     labels = torch.cat(labels,0)
     # print(feat_comp.shape,feat_loc.shape,labels.shape)
 
     assert (feat_loc.shape[0] == labels.shape[0])
     assert (feat_comp.shape[0] == labels.shape[0])
     assert (feat_id.shape[0] == labels.shape[0])
+    assert(feat_ensemble_score.shape[0]==labels.shape[0])
     return {
         "feat_comp": feat_comp,
         "feat_loc": feat_loc,
         "feat_id": feat_id,
+        "feat_ensemble_score": feat_ensemble_score,
         "target": labels
     }
 
