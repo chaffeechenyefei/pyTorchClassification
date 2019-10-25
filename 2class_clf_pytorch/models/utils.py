@@ -31,6 +31,15 @@ def one_hot_2_idx(y_one_hot):
     y_idx = idx_mat.view(-1,1)
     return y_idx
 
+def one_hot_2_idx_numpy(y_one_hot):
+    """
+    y_one_hot:numpy shape:[batch_size, nCls]
+    y_idx: numpy shape:[batch_size,1]
+    """
+    idx_mat = np.argmax(y_one_hot,1)
+    y_idx = idx_mat.reshape(-1,1)
+    return y_idx
+
 def topkAcc(output, target, topk=(1,)):
     """
     Computes the precision@k for the specified values of k
