@@ -50,7 +50,7 @@ def main():
     arg('--ckpt', type=str, default='model_loss_best.pt')
     arg('--pretrained', type=str, default='imagenet')#resnet 1, resnext imagenet
     arg('--batch-size', type=int, default=1)
-    arg('--step', type=str, default=8)
+    arg('--step', type=str, default=8)#update the gradients every 8 batch(sample num = step*batch-size*inner_size)
     arg('--workers', type=int, default=16)
     arg('--lr', type=float, default=3e-4)
     arg('--patience', type=int, default=4)
@@ -64,6 +64,7 @@ def main():
     arg('--finetuning',action='store_true')
     arg('--cos_sim_loss',action='store_true')
     arg('--ensemble', action='store_true')
+    arg('--sample_rate',type=float,default=0.5)
 
     #cuda version T/F
     use_cuda = cuda.is_available()
@@ -72,7 +73,7 @@ def main():
     #run_root: model/weights root
     run_root = Path(args.run_root)
 
-    df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_all.csv'))
+    df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_all.csv'),index_col=0)
     df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat.csv'),index_col=0)
     df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat.csv'),index_col=0)
 
@@ -94,7 +95,11 @@ def main():
 
     #split train/valid fold
     df_train_pair = df_all_pair[df_all_pair['fold'] == 0]
-    df_valid_pair = df_all_pair[df_all_pair['fold'] == 2]
+    if args.mode == 'train':
+        df_valid_pair = df_all_pair[df_all_pair['fold'] == 2].sample(frac=args.sample_rate).reset_index(drop=True)
+    else:
+        df_valid_pair = df_all_pair[df_all_pair['fold'] == 2]
+    del df_all_pair
 
     loc_name_dict = translocname2dict(df_loc_feat)
 
@@ -162,15 +167,19 @@ def main():
         train(params=all_params, **train_kwargs)
 
     elif args.mode == 'validate':
-        valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_valid_pair,
+        for ind_city in range(3):
+            df_valid_pair_city = df_valid_pair[df_all_pair['city']==ind_city]
+            valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_valid_pair_city,
                                    emb_dict=loc_name_dict,df_ensemble=df_ensemble, name='valid')
+            print('Predictions for city %d'%ind_city)
+            validation(model, criterion, tqdm.tqdm(valid_loader, desc='Validation'),
+                       use_cuda=use_cuda)
         # if args.finetuning:
         #     pass
         # else:
         #     load_model(model, Path(str(run_root) + '/' + args.ckpt))
         # model.set_infer_mode()
-        validation(model, criterion, tqdm.tqdm(valid_loader, desc='Validation'),
-                   use_cuda=use_cuda)
+
 
 #=============================================================================================================================
 #End of main
@@ -375,7 +384,7 @@ def validation(
             featEnsemble = batch_dat['feat_ensemble_score']
             all_targets.append(targets)#torch@cpu
             if use_cuda:
-                featComp, featLoc, targets, featId = featComp.cuda(), featLoc.cuda(), targets.cuda(), featId.cuda()
+                featComp, featLoc, targets, featId,featEnsemble = featComp.cuda(), featLoc.cuda(), targets.cuda(), featId.cuda(),featEnsemble.cuda()
             model_output = model(feat_comp=featComp, feat_loc=featLoc, id_loc = featId,feat_ensemble_score=featEnsemble)
             outputs = model_output['outputs']
             # outputs = outputs.squeeze()
@@ -383,6 +392,10 @@ def validation(
             # targets = targets.float()
             # loss = criterion(outputs, targets)
             loss = softmax_loss(outputs, targets)
+
+            # cur_batch_predictions = outputs[:, 1].data.cpu().numpy()
+            # cur_batch_targets = targets.data.cpu().numpy()
+            # fpr, tpr, roc_thresholds = roc_curve(cur_batch_targets, cur_batch_predictions)
             all_losses.append(loss.data.cpu().numpy())
             all_predictions.append(outputs)
     all_predictions = torch.cat(all_predictions)
@@ -392,20 +405,20 @@ def validation(
 
     all_predictions2 = all_predictions[:, 1].data.cpu().numpy()
 
-    acc = topkAcc(all_predictions,all_targets.cuda(),topk=(1,))
+    # acc = topkAcc(all_predictions,all_targets.cuda(),topk=(1,))
 
-    value, all_predictions = all_predictions.topk(1, dim=1, largest=True, sorted=True)
+    # value, all_predictions = all_predictions.topk(1, dim=1, largest=True, sorted=True)
 
-    all_predictions = all_predictions.data.cpu().numpy()
+    # all_predictions = all_predictions.data.cpu().numpy()
     all_targets =all_targets.data.cpu().numpy()
 
     fpr, tpr, roc_thresholds = roc_curve(all_targets, all_predictions2)
     roc_auc = auc(fpr,tpr)
 
     metrics = {}
-    metrics['valid_f1'] = fbeta_score(all_targets, all_predictions, beta=1, average='macro')
+    metrics['valid_f1'] = 0 #fbeta_score(all_targets, all_predictions, beta=1, average='macro')
     metrics['valid_loss'] = np.mean(all_losses)
-    metrics['valid_top1'] = acc[0].item()
+    metrics['valid_top1'] = 0#acc[0].item()
     metrics['auc'] = roc_auc
     metrics['valid_top5'] = 0 #acc[1].item()
 

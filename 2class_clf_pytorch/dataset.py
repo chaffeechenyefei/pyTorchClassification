@@ -530,7 +530,7 @@ class TrainDatasetLocationRS(Dataset):
         self._name = name
         self._posN = posN
         self._negN = negN
-        self._step = 100
+        self._step = 1000
         self._emb_dict = emb_dict
         self._flag_ensemble = flag_ensemble
 
@@ -554,19 +554,24 @@ class TrainDatasetLocationRS(Dataset):
             twin_dat = twin_dat[twin_dat['atlas_location_uuid_left'] != twin_dat['atlas_location_uuid_right']]
             # print(len(twin_dat))
             # twin_dat.head()
-            neg_dat = twin_dat[['duns_number_left', 'atlas_location_uuid_right']].sample(n=self._negN).reset_index(drop=True)
+            neg_dat = twin_dat[['duns_number_left', 'atlas_location_uuid_right']].sample(n=self._negN).reset_index(
+                drop=True)
             neg_dat = neg_dat.rename(
-                columns={'duns_number_left': 'duns_number', 'atlas_location_uuid_right': 'atlas_location_uuid'})
+                columns={'duns_number_left': 'duns_number', 'atlas_location_uuid_right': 'atlas_location_uuid',
+                         'label_left': 'label', 'fold_left': 'fold', 'groundtruth_left': 'groundtruth',
+                         'city_left': 'city'})
             neg_dat['label'] = 0
             # neg_dat.head()
             # len(neg_dat)
             pos_dat = dat1[['duns_number', 'atlas_location_uuid', 'label']]
             res_dat = pd.concat([pos_dat, neg_dat], axis=0)
             res_dat = res_dat.sample(frac=1).reset_index(drop=True)
+            Label = res_dat[['label']].to_numpy()
         else:
             inds = idx*self._step
             inde = min((idx+1)*self._step,len(self._df_loc_feat))
-            res_dat = self._df_pair.loc[inds:inde,['duns_number','atlas_location_uuid','label']]
+            res_dat = self._df_pair.loc[inds:inde,['duns_number','atlas_location_uuid','groundtruth']]
+            Label = (res_dat['atlas_location_uuid'] == res_dat['groundtruth']).to_numpy() + 0
 
         # concate training pair with location/company feature
         F_res_dat = pd.merge(res_dat, self._df_comp_feat, on='duns_number', how='left')
@@ -592,10 +597,6 @@ class TrainDatasetLocationRS(Dataset):
         #trans id(str) 2 Long
         loc_name_str = res_dat['atlas_location_uuid'].values.tolist()
         loc_name_int = [ self._emb_dict[n] for n in loc_name_str ]
-
-
-
-        Label = res_dat[['label']].to_numpy()
 
         # [B,Len_feat],[B,1]
         assert(len(Label)==len(FeatComp) and len(Label)==len(FeatLoc))
