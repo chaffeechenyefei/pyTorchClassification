@@ -26,7 +26,8 @@ from utils import (write_event, load_model, ThreadingDataLoader as DataLoader, a
 from gunlib.company_location_score_lib import translocname2dict
 
 from models.utils import *
-from udf.basic import save_obj,load_obj
+from udf.basic import save_obj,load_obj,calc_topk_acc_cat_all
+import matplotlib.pyplot as plt
 
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
 #os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
@@ -67,6 +68,7 @@ def main():
     arg('--cos_sim_loss',action='store_true')
     arg('--ensemble', action='store_true')
     arg('--sample_rate',type=float,default=1.0)
+    arg('--testStep',type=int,default=500000)
 
     nPosTr = 1000
     nNegTr = 2000
@@ -81,6 +83,7 @@ def main():
     df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_all.csv'),index_col=0)
     df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat.csv'),index_col=0)
     df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat.csv'),index_col=0)
+    clfile = ['PA.csv', 'SF.csv', 'SJ.csv']
 
 
     if args.ensemble:
@@ -112,11 +115,11 @@ def main():
 
     ##::DataLoader
     def make_loader(df_comp_feat: pd.DataFrame, df_loc_feat: pd.DataFrame, df_pair: pd.DataFrame, emb_dict:dict,df_ensemble,
-                    name='train',flag_ensemble=args.ensemble) -> DataLoader:
+                    name='train',flag_ensemble=args.ensemble,testStep=args.testStep) -> DataLoader:
         return DataLoader(
             TrainDatasetLocationRS(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_pair,df_ensemble_score=df_ensemble,
                                    emb_dict=emb_dict, name=name,flag_ensemble=flag_ensemble,
-                                   negN=nNegTr, posN=nPosTr),
+                                   negN=nNegTr, posN=nPosTr, testStep=testStep),
             shuffle=True,
             batch_size=args.batch_size,
             num_workers=args.workers,
@@ -181,11 +184,15 @@ def main():
     elif args.mode == 'validate':
         for ind_city in range(3):
             df_valid_pair_city = df_valid_pair[df_valid_pair['city']==ind_city]
+            all_company_loc = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
+            loc_name = all_company_loc[['atlas_location_uuid']].groupby('atlas_location_uuid')[
+                ['atlas_location_uuid']].first().reset_index(drop=True)
+            num_loc = len(loc_name)
             valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_valid_pair_city,
                                    emb_dict=loc_name_dict,df_ensemble=df_ensemble, name='valid')
             print('Predictions for city %d'%ind_city)
             validation(model, criterion, tqdm.tqdm(valid_loader, desc='Validation'),
-                       use_cuda=use_cuda, lossType=lossType)
+                       use_cuda=use_cuda, lossType=lossType, num_loc=num_loc, topK=100)
         # if args.finetuning:
         #     pass
         # else:
@@ -384,7 +391,7 @@ def train(args, model: nn.Module, criterion, *, params,
 #validation
 #=============================================================================================================================
 def validation(
-        model: nn.Module, criterion, valid_loader, use_cuda, lossType='softmax',
+        model: nn.Module, criterion, valid_loader, use_cuda, lossType='softmax', num_loc = 0, topK=0
         ) -> Dict[str, float]:
     model.eval()
     all_losses, all_predictions, all_targets = [], [], []
@@ -446,6 +453,31 @@ def validation(
     fpr, tpr, roc_thresholds = roc_curve(all_targets, all_predictions2)
 
     roc_auc = auc(fpr,tpr)
+
+    if topK > 0 and num_loc > 0:
+        all_predictions2 = all_predictions2.reshape(-1,num_loc)
+        all_targets = all_targets.reshape(-1,num_loc)
+
+        truth_cat = one_hot_2_idx_numpy(all_targets)
+        R_cat = np.array(list(range(num_loc)))
+        topk_precision = calc_topk_acc_cat_all(all_targets, truth_cat, R_cat, k=topK)
+        step = int(topK/10)
+
+        x = list(range(1, topK + 1))
+        y = list(topk_precision)
+        plt.figure()
+        plt.plot(x, y)
+        plt.grid()
+
+        for z in range(10, topK + 1, step):
+            z = z - 1
+            plt.text(z, y[z], '%.4f' % y[z], ha='center', va='bottom', fontsize=9)
+
+        plt.xlabel("topk")
+        plt.ylabel("accuracy")
+        plt.title("topk accuracy curve of %d location" % num_loc)
+        plt.savefig('topk_acc_with_%d_location.jpg'%num_loc)
+        plt.close()
 
     metrics = {}
     metrics['valid_f1'] = 0 #fbeta_score(all_targets, all_predictions, beta=1, average='macro')

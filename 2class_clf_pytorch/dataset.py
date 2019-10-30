@@ -521,7 +521,7 @@ class TrainDatasetLocationRS(Dataset):
                  df_pair: pd.DataFrame,
                  df_ensemble_score, flag_ensemble:bool,
                  emb_dict:dict,
-                 name: str = 'train' , posN = 100, negN=200):
+                 name: str = 'train' , posN = 100, negN=200,testStep=500000):
         super().__init__()
         self._df_comp_feat = df_comp_feat.fillna(0)
         self._df_loc_feat = df_loc_feat.fillna(0)
@@ -530,7 +530,7 @@ class TrainDatasetLocationRS(Dataset):
         self._name = name
         self._posN = posN
         self._negN = negN
-        self._step = 500000
+        self._step = testStep
         self._emb_dict = emb_dict
         self._flag_ensemble = flag_ensemble
 
