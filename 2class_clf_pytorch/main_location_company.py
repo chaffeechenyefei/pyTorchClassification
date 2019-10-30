@@ -26,6 +26,8 @@ from utils import (write_event, load_model, ThreadingDataLoader as DataLoader, a
 from gunlib.company_location_score_lib import translocname2dict
 
 from models.utils import *
+from udf.basic import save_obj,load_obj
+
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
 #os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
 
@@ -64,7 +66,10 @@ def main():
     arg('--finetuning',action='store_true')
     arg('--cos_sim_loss',action='store_true')
     arg('--ensemble', action='store_true')
-    arg('--sample_rate',type=float,default=0.5)
+    arg('--sample_rate',type=float,default=1.0)
+
+    nPosTr = 1000
+    nNegTr = 2000
 
     #cuda version T/F
     use_cuda = cuda.is_available()
@@ -111,7 +116,7 @@ def main():
         return DataLoader(
             TrainDatasetLocationRS(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_pair,df_ensemble_score=df_ensemble,
                                    emb_dict=emb_dict, name=name,flag_ensemble=flag_ensemble,
-                                   negN=200, posN=100),
+                                   negN=nNegTr, posN=nPosTr),
             shuffle=True,
             batch_size=args.batch_size,
             num_workers=args.workers,
@@ -279,7 +284,7 @@ def train(args, model: nn.Module, criterion, *, params,
     for epoch in range(epoch, n_epochs + 1):
         model.train()
         tq = tqdm.tqdm(total=(args.epoch_size or
-                              300*len(train_loader) * args.batch_size))
+                              (3000)*len(train_loader) * args.batch_size))
 
         if epoch >= 20 and epoch%2==0:
             lr = lr * 0.9
@@ -414,7 +419,11 @@ def validation(
     # all_predictions = all_predictions.data.cpu().numpy()
     all_targets =all_targets.data.cpu().numpy()
 
+    # save_obj(all_targets,'all_targets')
+    # save_obj(all_predictions2,'all_predictions2')
+
     fpr, tpr, roc_thresholds = roc_curve(all_targets, all_predictions2)
+
     roc_auc = auc(fpr,tpr)
 
     metrics = {}

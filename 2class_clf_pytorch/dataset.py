@@ -530,7 +530,7 @@ class TrainDatasetLocationRS(Dataset):
         self._name = name
         self._posN = posN
         self._negN = negN
-        self._step = 1000
+        self._step = 500000
         self._emb_dict = emb_dict
         self._flag_ensemble = flag_ensemble
 
@@ -538,7 +538,7 @@ class TrainDatasetLocationRS(Dataset):
         if self._name == 'train':
             return 1000
         else:
-            return math.ceil(len(self._df_loc_feat)/self._step)
+            return math.ceil(len(self._df_pair)/self._step)#len of pair
 
     def tbatch(self):
         return self._posN + self._negN
@@ -569,7 +569,7 @@ class TrainDatasetLocationRS(Dataset):
             Label = res_dat[['label']].to_numpy()
         else:
             inds = idx*self._step
-            inde = min((idx+1)*self._step,len(self._df_loc_feat))
+            inde = min((idx+1)*self._step,len(self._df_pair))
             res_dat = self._df_pair.loc[inds:inde,['duns_number','atlas_location_uuid','groundtruth']]
             Label = (res_dat['atlas_location_uuid'] == res_dat['groundtruth']).to_numpy() + 0
 

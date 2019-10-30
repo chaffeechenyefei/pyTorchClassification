@@ -4,7 +4,7 @@ Implentmented models:
 
 	NetVLAD: NetVLAD-CNN architecture for weakly supervised place recognition[cvpr][2016]
 
-Arcface:
+	Arcface:
 
 	Wide&Deep[2016] @ models/location_recommendation.py
 
