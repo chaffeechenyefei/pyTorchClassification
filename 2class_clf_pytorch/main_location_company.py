@@ -97,8 +97,10 @@ def main():
     df_train_pair = df_all_pair[df_all_pair['fold'] == 0]
     if args.mode == 'train':
         df_valid_pair = df_all_pair[df_all_pair['fold'] == 2].sample(frac=args.sample_rate).reset_index(drop=True)
+        print('Validate size%d'%len(df_valid_pair))
     else:
         df_valid_pair = df_all_pair[df_all_pair['fold'] == 2]
+        print('Validate size%d' % len(df_valid_pair))
     del df_all_pair
 
     loc_name_dict = translocname2dict(df_loc_feat)
@@ -168,7 +170,7 @@ def main():
 
     elif args.mode == 'validate':
         for ind_city in range(3):
-            df_valid_pair_city = df_valid_pair[df_all_pair['city']==ind_city]
+            df_valid_pair_city = df_valid_pair[df_valid_pair['city']==ind_city]
             valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_valid_pair_city,
                                    emb_dict=loc_name_dict,df_ensemble=df_ensemble, name='valid')
             print('Predictions for city %d'%ind_city)

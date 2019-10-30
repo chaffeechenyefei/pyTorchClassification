@@ -592,7 +592,7 @@ class TrainDatasetLocationRS(Dataset):
             # print(list_col)
             FeatEnsembleScore = F_res_dat[list_col].to_numpy()
         else:
-            FeatEnsembleScore = np.ones((len(F_res_dat,1)),dtype=np.float32)
+            FeatEnsembleScore = np.ones((len(F_res_dat),1),dtype=np.float32)
 
         #trans id(str) 2 Long
         loc_name_str = res_dat['atlas_location_uuid'].values.tolist()
@@ -606,7 +606,7 @@ class TrainDatasetLocationRS(Dataset):
         featLoc = torch.FloatTensor(FeatLoc)
         featEnsembleScore = torch.FloatTensor(FeatEnsembleScore)
         featId = torch.LongTensor(loc_name_int).reshape(-1,1)
-        target = torch.LongTensor(Label)
+        target = torch.LongTensor(Label).reshape(-1,1)
 
         return { "feat_comp": featComp,
                  "feat_loc": featLoc,
