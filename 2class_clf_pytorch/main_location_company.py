@@ -126,7 +126,12 @@ def main():
     #Not used in this version
     # criterion = nn.BCEWithLogitsLoss(reduction='none')
     # criterion = nn.CrossEntropyLoss(reduction='none')
-    criterion = nn.CosineEmbeddingLoss(0.2,reduce=True,reduction='mean')
+    if args.cos_sim_loss:
+        criterion = nn.CosineEmbeddingLoss(0.2,reduce=True,reduction='mean')
+        lossType = 'cosine'
+    else:
+        criterion = softmax_loss
+        lossType = 'softmax'
 
     # se- ception dpn can only use finetuned model from imagenet
     # model = getattr(models, args.model)(feat_comp_dim=102, feat_loc_dim=23) #location_recommend_model_v1
@@ -180,7 +185,7 @@ def main():
                                    emb_dict=loc_name_dict,df_ensemble=df_ensemble, name='valid')
             print('Predictions for city %d'%ind_city)
             validation(model, criterion, tqdm.tqdm(valid_loader, desc='Validation'),
-                       use_cuda=use_cuda)
+                       use_cuda=use_cuda, lossType=lossType)
         # if args.finetuning:
         #     pass
         # else:
@@ -317,7 +322,7 @@ def train(args, model: nn.Module, criterion, *, params,
 
                 # outputs = outputs.squeeze()
 
-                loss1 = softmax_loss(outputs, targets)
+                # loss1 = softmax_loss(outputs, targets)
                 # loss2 = TripletLossV1(margin=0.5)(feats,targets)
                 # loss1 = criterion(outputs,targets)
 
@@ -326,10 +331,11 @@ def train(args, model: nn.Module, criterion, *, params,
                     out_comp_feat = model_output['comp_feat']
                     out_loc_feat = model_output['loc_feat']
                     cos_targets = 2*targets.float()-1.0
-                    loss2 = criterion(out_comp_feat,out_loc_feat,cos_targets)
-                    loss = 0.8*loss1+0.2*loss2
+                    loss = criterion(out_comp_feat,out_loc_feat,cos_targets)
+                    lossType = 'cosine'
                 else:
-                    loss = 1.0*loss1
+                    loss = softmax_loss(outputs, targets)
+                    lossType = 'softmax'
 
                 batch_size = featComp.size(0)
 
@@ -351,7 +357,7 @@ def train(args, model: nn.Module, criterion, *, params,
             print('saving')
             save(epoch + 1)
             print('validation')
-            valid_metrics = validation(model, criterion, valid_loader, use_cuda)
+            valid_metrics = validation(model, criterion, valid_loader, use_cuda, lossType=lossType)
             write_event(log, step, **valid_metrics)
             valid_loss = valid_metrics['valid_loss']
             valid_top1 = valid_metrics['valid_top1']
@@ -378,7 +384,7 @@ def train(args, model: nn.Module, criterion, *, params,
 #validation
 #=============================================================================================================================
 def validation(
-        model: nn.Module, criterion, valid_loader, use_cuda,
+        model: nn.Module, criterion, valid_loader, use_cuda, lossType='softmax',
         ) -> Dict[str, float]:
     model.eval()
     all_losses, all_predictions, all_targets = [], [], []
@@ -398,19 +404,34 @@ def validation(
             # print(outputs.shape,targets.shape)
             # targets = targets.float()
             # loss = criterion(outputs, targets)
-            loss = softmax_loss(outputs, targets)
+            # loss = softmax_loss(outputs, targets)
+
+            if lossType=='softmax':
+                loss = softmax_loss(outputs, targets)
+                all_predictions.append(outputs)
+            else:
+                out_comp_feat = model_output['comp_feat']
+                out_loc_feat = model_output['loc_feat']
+                cos_targets = 2 * targets.float() - 1.0
+                loss = criterion(out_comp_feat, out_loc_feat, cos_targets)
+                all_predictions.append(model_output['outputs_cos'])
+
 
             # cur_batch_predictions = outputs[:, 1].data.cpu().numpy()
             # cur_batch_targets = targets.data.cpu().numpy()
             # fpr, tpr, roc_thresholds = roc_curve(cur_batch_targets, cur_batch_predictions)
             all_losses.append(loss.data.cpu().numpy())
-            all_predictions.append(outputs)
+
     all_predictions = torch.cat(all_predictions)
     all_targets = torch.cat(all_targets)#list->torch
     print('all_predictions.shape: ')
     print(all_predictions.shape)
 
-    all_predictions2 = all_predictions[:, 1].data.cpu().numpy()
+    if lossType=='softmax':
+        all_predictions2 = all_predictions[:, 1].data.cpu().numpy()
+    else:
+        all_predictions = (all_predictions + 1)/2 #squeeze to [0,1]
+        all_predictions2 = all_predictions.data.cpu().numpy()
 
     # acc = topkAcc(all_predictions,all_targets.cuda(),topk=(1,))
 

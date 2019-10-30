@@ -331,7 +331,7 @@ class NaiveDLCosineLosswKemb(nn.Module):
         )
 
 
-    def forward(self, feat_comp, feat_loc, id_loc):
+    def forward(self, feat_comp, feat_loc, id_loc,feat_ensemble_score=None):
         assert (feat_comp.shape[1] == self._feat_comp_dim)
         assert (feat_loc.shape[1] == self._feat_loc_dim)
 

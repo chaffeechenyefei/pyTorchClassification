@@ -569,7 +569,7 @@ class TrainDatasetLocationRS(Dataset):
             Label = res_dat[['label']].to_numpy()
         else:
             inds = idx*self._step
-            inde = min((idx+1)*self._step,len(self._df_pair))
+            inde = min((idx+1)*self._step,len(self._df_pair)) - 1#loc[a,b] = [a,b] close set!!
             res_dat = self._df_pair.loc[inds:inde,['duns_number','atlas_location_uuid','groundtruth']]
             Label = (res_dat['atlas_location_uuid'] == res_dat['groundtruth']).to_numpy() + 0
 
