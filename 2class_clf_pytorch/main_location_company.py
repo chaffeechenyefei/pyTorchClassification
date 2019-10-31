@@ -29,6 +29,8 @@ from models.utils import *
 from udf.basic import save_obj,load_obj,calc_topk_acc_cat_all
 import matplotlib.pyplot as plt
 
+# from torch.utils.data import DataLoader
+
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
 #os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
 
@@ -115,12 +117,12 @@ def main():
 
     ##::DataLoader
     def make_loader(df_comp_feat: pd.DataFrame, df_loc_feat: pd.DataFrame, df_pair: pd.DataFrame, emb_dict:dict,df_ensemble,
-                    name='train',flag_ensemble=args.ensemble,testStep=args.testStep) -> DataLoader:
+                    name='train',flag_ensemble=args.ensemble,testStep=args.testStep,shuffle=True) -> DataLoader:
         return DataLoader(
             TrainDatasetLocationRS(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_pair,df_ensemble_score=df_ensemble,
                                    emb_dict=emb_dict, name=name,flag_ensemble=flag_ensemble,
                                    negN=nNegTr, posN=nPosTr, testStep=testStep),
-            shuffle=True,
+            shuffle=shuffle,
             batch_size=args.batch_size,
             num_workers=args.workers,
             collate_fn=collate_TrainDatasetLocationRS
@@ -189,7 +191,7 @@ def main():
                 ['atlas_location_uuid']].first().reset_index(drop=True)
             num_loc = len(loc_name)
             valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_valid_pair_city,
-                                   emb_dict=loc_name_dict,df_ensemble=df_ensemble, name='valid')
+                                   emb_dict=loc_name_dict,df_ensemble=df_ensemble, name='valid',shuffle=False)
             print('Predictions for city %d'%ind_city)
             validation(model, criterion, tqdm.tqdm(valid_loader, desc='Validation'),
                        use_cuda=use_cuda, lossType=lossType, num_loc=num_loc, topK=100)
@@ -458,9 +460,11 @@ def validation(
         all_predictions2 = all_predictions2.reshape(-1,num_loc)
         all_targets = all_targets.reshape(-1,num_loc)
 
+        print( 'topk data reforming checking: ', (all_targets.sum(axis=1) == 1).all() )
+
         truth_cat = one_hot_2_idx_numpy(all_targets)
         R_cat = np.array(list(range(num_loc)))
-        topk_precision = calc_topk_acc_cat_all(all_targets, truth_cat, R_cat, k=topK)
+        topk_precision = calc_topk_acc_cat_all(all_predictions2, truth_cat, R_cat, k=topK)
         step = int(topK/10)
 
         x = list(range(1, topK + 1))
