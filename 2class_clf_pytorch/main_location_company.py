@@ -26,7 +26,7 @@ from utils import (write_event, load_model, ThreadingDataLoader as DataLoader, a
 from gunlib.company_location_score_lib import translocname2dict
 
 from models.utils import *
-from udf.basic import save_obj,load_obj,calc_topk_acc_cat_all
+from udf.basic import save_obj,load_obj,calc_topk_acc_cat_all,topk_recall_score_all
 import matplotlib.pyplot as plt
 
 # from torch.utils.data import DataLoader
@@ -69,8 +69,9 @@ def main():
     arg('--finetuning',action='store_true')
     arg('--cos_sim_loss',action='store_true')
     arg('--ensemble', action='store_true')
-    arg('--sample_rate',type=float,default=1.0)
+    arg('--sample_rate',type=float,default=1.0)#sample part of testing data for evaluating during training
     arg('--testStep',type=int,default=500000)
+    arg('--query_location',action='store_true',help='use location as query')
 
     nPosTr = 1000
     nNegTr = 2000
@@ -111,6 +112,8 @@ def main():
     else:
         df_valid_pair = df_all_pair[df_all_pair['fold'] == 2]
         print('Validate size%d' % len(df_valid_pair))
+        if args.query_location:
+            df_valid_pair = df_valid_pair.sort_values(by=['atlas_location_uuid']).reset_index(drop=True)
     del df_all_pair
 
     loc_name_dict = translocname2dict(df_loc_feat)
@@ -184,6 +187,9 @@ def main():
         train(params=all_params, **train_kwargs)
 
     elif args.mode == 'validate':
+        topks = [300,1000,600]
+
+        Query_Company = not args.query_location
         for ind_city in range(3):
             df_valid_pair_city = df_valid_pair[df_valid_pair['city']==ind_city]
             all_company_loc = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
@@ -194,12 +200,7 @@ def main():
                                    emb_dict=loc_name_dict,df_ensemble=df_ensemble, name='valid',shuffle=False)
             print('Predictions for city %d'%ind_city)
             validation(model, criterion, tqdm.tqdm(valid_loader, desc='Validation'),
-                       use_cuda=use_cuda, lossType=lossType, num_loc=num_loc, topK=100)
-        # if args.finetuning:
-        #     pass
-        # else:
-        #     load_model(model, Path(str(run_root) + '/' + args.ckpt))
-        # model.set_infer_mode()
+                       use_cuda=use_cuda, lossType=lossType, num_loc=num_loc, topK=topks[ind_city],Query_Company=Query_Company)
 
 
 #=============================================================================================================================
@@ -393,7 +394,7 @@ def train(args, model: nn.Module, criterion, *, params,
 #validation
 #=============================================================================================================================
 def validation(
-        model: nn.Module, criterion, valid_loader, use_cuda, lossType='softmax', num_loc = 0, topK=0
+        model: nn.Module, criterion, valid_loader, use_cuda, lossType='softmax', num_loc = 0, topK=0, Query_Company=True
         ) -> Dict[str, float]:
     model.eval()
     all_losses, all_predictions, all_targets = [], [], []
@@ -457,16 +458,20 @@ def validation(
     roc_auc = auc(fpr,tpr)
 
     if topK > 0 and num_loc > 0:
-        all_predictions2 = all_predictions2.reshape(-1,num_loc)
-        all_targets = all_targets.reshape(-1,num_loc)
+        if Query_Company:#topk accuracy for company query
+            all_predictions2 = all_predictions2.reshape(-1,num_loc)
+            all_targets = all_targets.reshape(-1,num_loc)
+            print( 'topk data reforming checking: ', (all_targets.sum(axis=1) == 1).all() )
+            # truth_cat = one_hot_2_idx_numpy(all_targets)
+            # R_cat = np.array(list(range(num_loc)))
+            # topk_precision = calc_topk_acc_cat_all(all_predictions2, truth_cat, R_cat, k=topK)
+        else:
+            all_predictions2 = all_predictions2.reshape(num_loc, -1)
+            all_targets = all_targets.reshape(num_loc, -1)
 
-        print( 'topk data reforming checking: ', (all_targets.sum(axis=1) == 1).all() )
+        topk_precision = topk_recall_score_all(pred=all_predictions2, truth=all_targets, topk=topK)
 
-        truth_cat = one_hot_2_idx_numpy(all_targets)
-        R_cat = np.array(list(range(num_loc)))
-        topk_precision = calc_topk_acc_cat_all(all_predictions2, truth_cat, R_cat, k=topK)
-        step = int(topK/10)
-
+        step = int(topK / 10)
         x = list(range(1, topK + 1))
         y = list(topk_precision)
         plt.figure()
@@ -479,9 +484,15 @@ def validation(
 
         plt.xlabel("topk")
         plt.ylabel("accuracy")
-        plt.title("topk accuracy curve of %d location" % num_loc)
-        plt.savefig('topk_acc_with_%d_location.jpg'%num_loc)
+
+        if Query_Company:
+            plt.title("topk accuracy curve of %d location" % num_loc)
+            plt.savefig('topk_acc_of_company_query_%d.jpg' % num_loc)
+        else:
+            plt.title("topk accuracy curve of companies with %d locations" % num_loc)
+            plt.savefig('topk_acc_of_location_query_%d.jpg' % num_loc)
         plt.close()
+
 
     metrics = {}
     metrics['valid_f1'] = 0 #fbeta_score(all_targets, all_predictions, beta=1, average='macro')

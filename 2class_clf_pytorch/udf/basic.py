@@ -105,6 +105,48 @@ def calc_topk_acc_cat_all(QRscore,y_truth_cat,R_cat,k=3):
     return res
 
 #=======================================================================================================================
+# topk recall score of numpy version
+#=======================================================================================================================
+def topk_recall_score(pred,truth,topk=5):
+    """
+    N: sample number
+    M: class number
+    pred [N,M] 
+    truth [N,M]
+    large value of score means 1 in truth, while small value of score means 0 in truth.
+    """
+    N,M = pred.shape
+    _N,_M = truth.shape
+    assert( M==_M and N==_N )
+    #get rank of the predicted score, acsending
+    rank_of_pred = np.argsort(pred,axis=1)
+    #get topk ranked label
+    ranked_label = np.take_along_axis(truth,rank_of_pred,axis=1)[:,-1:-topk-1:-1]
+    recall_score = ranked_label.sum()/topk/N
+    return recall_score
+
+def topk_recall_score_all(pred,truth,topk=5):
+    """
+    N: sample number
+    M: class number
+    pred [N,M] 
+    truth [N,M]
+    large value of score means 1 in truth, while small value of score means 0 in truth.
+    return each topL(L<=topk) recall_score 
+    """
+    N,M = pred.shape
+    _N,_M = truth.shape
+    assert( M==_M and N==_N )
+    #get rank of the predicted score, acsending
+    rank_of_pred = np.argsort(pred,axis=1)
+    #get topk ranked label
+    ranked_label = np.take_along_axis(truth,rank_of_pred,axis=1)[:,-1:-topk-1:-1]
+    recall_score = np.cumsum(ranked_label.sum(axis=0).reshape(1,-1),axis=1)
+    nTop = np.array(range(topk)).reshape(1,topk) + 1
+    recall_score = recall_score / nTop / N
+    return recall_score
+
+#=======================================================================================================================
 # main
 #=======================================================================================================================
 if __name__ == '__main__':

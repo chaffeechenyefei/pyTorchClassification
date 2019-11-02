@@ -81,5 +81,5 @@ Conclusion: netvlad can be used as traditional toolbox where features are fixed 
 
 nohup python3 -u main_location_company.py --model location_recommend_model_v5 --run_root result/location_recommend_model_v5 --lr 0.01 --cos_sim_loss --testStep 20000 > nohup.out 2> nohup.err &
 
-
+python3 main_location_company.py --model location_recommend_model_v6 --run_root result/location_recommend_model_v6 --lr 0.01
 

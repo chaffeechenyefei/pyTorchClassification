@@ -13,6 +13,111 @@ from torch import cuda
 use_cuda = cuda.is_available()
 # ===================================================================================================
 # ===================================================================================================
+# Basic module for any number of input channel with L size
+# ===================================================================================================
+# ===================================================================================================
+class setLinearLayerConv1d(nn.Module):
+    """
+    mapping a set of feature into one unified vector vesion 1
+    input: [B,K,Lin]
+    output:[B,Lout]
+    conv1d version
+    """
+    def __init__(self, fin:int,fout:int):
+        super().__init__()
+        self._fin = fin
+        self._fout = fout
+        self.net = nn.Conv1d(in_channels=1,out_channels=fout,kernel_size=fin)
+
+    def forward(self,feat_set,type='mean'):
+        """
+        here we consider the combination of feature as mean-pooling
+        """
+        B,K,fin = feat_set.shape
+        assert(fin==self._fin)
+        if type == 'mean':
+            m_feat_set = feat_set.sum(dim=1,keepdim=True) / K #[B,K,fin]->[B,1,fin]
+            unified_feat = self.net(m_feat_set) #[B,1,fin]->[B,fout,1]
+            return unified_feat.squeeze()
+        elif type == 'mean_debug':
+            feat_out = 0
+            for k in range(K):
+                feat_out += self.net(feat_set[:, k, :].unsqueeze(1))  # [B,1,fin]->[B,fout,1]
+            feat_out /= K
+            return feat_out.squeeze()
+        else:#max pooling
+            feat_out = torch.zeros(B,self._fout,K)#[B,fout,K]
+            for k in range(K):
+                feat_out[:,:,k] = 1.0*self.net(feat_set[:, k, :].unsqueeze(1)).squeeze()  # [B,1,fin]->[B,fout,1]
+            pool = F.max_pool1d(K)
+            feat_out = pool(feat_out)
+            return feat_out.squeeze()
+
+class setLinearLayer(nn.Module):
+    """
+    mapping a set of feature into one unified vector vesion 2
+    input: [B,K,Lin]
+    output:[B,Lout,Lmid] here Lout is consider as channel and Lmid is real feature
+    this version will use linear layer
+    """
+    def __init__(self, fin: int, fout: int , fmid:int=1):
+        super().__init__()
+        self._fin = fin
+        self._fout = fout
+        self._fmid = fmid
+        self.nets = []
+        for i in range(self._fout):
+            self.nets.append(nn.Linear(in_features=fin,out_features=self._fmid))
+            #[B,*,Lin]->[B,*,Lout] weights are shared for each *
+
+    def forward(self, feat_set):
+        B,K,fin = feat_set.shape
+        assert(fin==self._fin)
+        feat_out = torch.zeros(B ,self._fout, self._fmid)  # [B,fout,fmid]
+        pool = F.max_pool1d(K)
+        for i in range(self._fout):
+            feat_mid = self.nets[i](feat_set)  # [B,K,fin]->[B,K,fmid]
+            feat_mid = pool(feat_mid.permute(0,2,1)).squeeze()#[B,K,fmid]-permute>[B,fmid,K]-pool>[B,fmid,1]->[B,fmid]
+            feat_out[:,i,:] = feat_mid
+        #feat_out = [B,fout,fmid]
+        return feat_out
+
+
+class companyMLP(nn.Module):
+    """
+    Network for company feature extracting.
+    Just a simple MLP model. But it works for [B,*,L] shaped input
+    Ref: PointNet: Deep Learning on Point Sets for 3D Classification and Segmentation
+    """
+    def __init__(self,fid:int,fod:int,l2norm:bool=True):
+        super().__init__()
+        self._fid = fid
+        self._fod = fod
+        self.Flagl2norm = l2norm
+        self.mlp = nn.Sequential(
+            nn.Linear(in_features=fid,out_features=128),
+            nn.LeakyReLU(),
+            nn.Linear(in_features=128,out_features=fod),
+            nn.LeakyReLU(),
+        )
+
+    def forward(self,feat_set):
+        """
+        :param feat_set: [B,K,fid] 
+        where:
+            B:  bath_size 
+            K:  number of points/companies
+            fid: dimensionality of input feature
+        :return: 
+        """
+        if self.Flagl2norm:
+            feat_set = F.normalize(feat_set,p=2,dim=2)
+
+        return self.mlp(feat_set) #[B,K,fod]
+
+
+# ===================================================================================================
+# ===================================================================================================
 # Location Recommendation Model
 # ===================================================================================================
 # ===================================================================================================
