@@ -469,11 +469,11 @@ def validation(
             all_predictions2 = all_predictions2.reshape(num_loc, -1)
             all_targets = all_targets.reshape(num_loc, -1)
 
-        topk_precision = topk_recall_score_all(pred=all_predictions2, truth=all_targets, topk=topK)
+        topk_recall = topk_recall_score_all(pred=all_predictions2, truth=all_targets, topk=topK)
 
         step = int(topK / 10)
         x = list(range(1, topK + 1))
-        y = list(topk_precision)
+        y = list(topk_recall.reshape(-1))
         plt.figure()
         plt.plot(x, y)
         plt.grid()
@@ -483,14 +483,14 @@ def validation(
             plt.text(z, y[z], '%.4f' % y[z], ha='center', va='bottom', fontsize=9)
 
         plt.xlabel("topk")
-        plt.ylabel("accuracy")
+        plt.ylabel("recall")
 
         if Query_Company:
-            plt.title("topk accuracy curve of %d location" % num_loc)
-            plt.savefig('topk_acc_of_company_query_%d.jpg' % num_loc)
+            plt.title("topk recall curve of %d location" % num_loc)
+            plt.savefig('topk_recall_of_company_query_%d.jpg' % num_loc)
         else:
-            plt.title("topk accuracy curve of companies with %d locations" % num_loc)
-            plt.savefig('topk_acc_of_location_query_%d.jpg' % num_loc)
+            plt.title("topk recall curve of companies with %d locations" % num_loc)
+            plt.savefig('topk_recall_of_location_query_%d.jpg' % num_loc)
         plt.close()
 
 

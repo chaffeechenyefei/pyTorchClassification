@@ -83,3 +83,9 @@ nohup python3 -u main_location_company.py --model location_recommend_model_v5 --
 
 python3 main_location_company.py --model location_recommend_model_v6 --run_root result/location_recommend_model_v6 --lr 0.01
 
+python3 main_location_company.py --model location_recommend_model_v6 --run_root result/location_recommend_model_v6 --lr 0.01 --mode validate --ckpt model_deep_wide.final --query_location
+
+
+
+
+

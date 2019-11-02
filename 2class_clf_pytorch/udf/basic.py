@@ -132,7 +132,7 @@ def topk_recall_score_all(pred,truth,topk=5):
     pred [N,M] 
     truth [N,M]
     large value of score means 1 in truth, while small value of score means 0 in truth.
-    return each topL(L<=topk) recall_score 
+    return each topL(L<=topk) average recall_score 
     """
     N,M = pred.shape
     _N,_M = truth.shape
@@ -140,10 +140,14 @@ def topk_recall_score_all(pred,truth,topk=5):
     #get rank of the predicted score, acsending
     rank_of_pred = np.argsort(pred,axis=1)
     #get topk ranked label
-    ranked_label = np.take_along_axis(truth,rank_of_pred,axis=1)[:,-1:-topk-1:-1]
+    ranked_label = np.take_along_axis(truth,rank_of_pred,axis=1)[:,-1:-topk-1:-1]#[N,topk]
+    nTruth = truth.sum(axis=1).reshape(-1,1)#[N,1]
+    nTruth[nTruth<1]=1
+    ranked_label = ranked_label/nTruth
     recall_score = np.cumsum(ranked_label.sum(axis=0).reshape(1,-1),axis=1)
-    nTop = np.array(range(topk)).reshape(1,topk) + 1
-    recall_score = recall_score / nTop / N
+    # nTruth = truth.sum(axis=1).reshape(1,-1)
+    # nTop = np.array(range(topk)).reshape(1,topk) + 1
+    recall_score = (recall_score / N)
     return recall_score
 
 #=======================================================================================================================
