@@ -554,7 +554,7 @@ class TrainDatasetLocationRS(Dataset):
             twin_dat = twin_dat[twin_dat['atlas_location_uuid_left'] != twin_dat['atlas_location_uuid_right']]
             # print(len(twin_dat))
             # twin_dat.head()
-            neg_dat = twin_dat[['duns_number_left', 'atlas_location_uuid_right']].sample(n=self._negN).reset_index(
+            neg_dat = twin_dat[['duns_number_left', 'atlas_location_uuid_right']].sample(n=min(self._negN,len(twin_dat))).reset_index(
                 drop=True)
             neg_dat = neg_dat.rename(
                 columns={'duns_number_left': 'duns_number', 'atlas_location_uuid_right': 'atlas_location_uuid',

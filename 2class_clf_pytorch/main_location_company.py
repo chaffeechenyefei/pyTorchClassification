@@ -41,6 +41,9 @@ TT_DATA_ROOT = '/home/ubuntu/location_recommender_system/'
 
 OLD_N_CLASSES = 2
 N_CLASSES = 2#253#109
+
+nPosTr = 1000
+nNegTr = 2000
 #=============================================================================================================================
 #main
 #=============================================================================================================================
@@ -48,7 +51,7 @@ def main():
     #cmd and arg parser
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
-    arg('--mode', choices=['train', 'validate', 'predict_valid', 'predict_test'], default='train')
+    arg('--mode', choices=['train', 'validate', 'predict_valid', 'predict_test','train_test'], default='train')
     arg('--run_root', default='result/location_company')
     arg('--fold', type=int, default=0)
     arg('--model', default='location_recommend_model_v3')
@@ -60,7 +63,7 @@ def main():
     arg('--lr', type=float, default=3e-4)
     arg('--patience', type=int, default=4)
     arg('--clean', action='store_true')
-    arg('--n-epochs', type=int, default=120)
+    arg('--n-epochs', type=int, default=80)
     arg('--epoch-size', type=int)
     arg('--tta', type=int, default=1)
     arg('--use-sample', action='store_true', help='use a sample of the dataset')
@@ -73,8 +76,7 @@ def main():
     arg('--testStep',type=int,default=500000)
     arg('--query_location',action='store_true',help='use location as query')
 
-    nPosTr = 1000
-    nNegTr = 2000
+
 
     #cuda version T/F
     use_cuda = cuda.is_available()
@@ -121,6 +123,7 @@ def main():
     del df_all_pair
 
     loc_name_dict = translocname2dict(df_loc_feat)
+    print('Location Embedding Number: %d'%len(loc_name_dict))
 
     ##::DataLoader
     def make_loader(df_comp_feat: pd.DataFrame, df_loc_feat: pd.DataFrame, df_pair: pd.DataFrame, emb_dict:dict,df_ensemble,
@@ -190,6 +193,51 @@ def main():
 
         train(params=all_params, **train_kwargs)
 
+    elif args.mode == 'train_test':
+        if run_root.exists() and args.clean:
+            shutil.rmtree(run_root)
+        run_root.mkdir(exist_ok=True, parents=True)
+        Path(str(run_root) + '/params.json').write_text(
+            json.dumps(vars(args), indent=4, sort_keys=True))
+
+        train_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_train_pair, emb_dict=loc_name_dict, df_ensemble=df_ensemble, name='train')
+        valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=df_valid_pair, emb_dict=loc_name_dict, df_ensemble=df_ensemble, name='valid')
+
+        train_kwargs = dict(
+            args=args,
+            model=model,
+            criterion=criterion,
+            train_loader=train_loader,
+            valid_loader=valid_loader,
+            patience=args.patience,
+            init_optimizer=lambda params, lr: Adam(params, lr, betas=(0.9,0.999), eps=1e-08, weight_decay = 2e-4),
+            use_cuda=use_cuda,
+        )
+
+        train(params=all_params, **train_kwargs)
+
+        for ind_city in [3,4]:
+            pdcl = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
+            all_loc_name = pdcl[['atlas_location_uuid']].groupby(['atlas_location_uuid'])[
+                ['atlas_location_uuid']].first().reset_index(drop=True)
+            all_loc_name['key'] = 0
+            pdcl['key'] = 0
+
+            testing_pair = pd.merge(pdcl, all_loc_name, on='key', how='left',
+                                    suffixes=['_left', '_right']).reset_index(drop=True)
+
+            testing_pair = testing_pair.rename(
+                columns={'atlas_location_uuid_left': 'groundtruth', 'atlas_location_uuid_right': 'atlas_location_uuid'})
+            testing_pair = testing_pair[['duns_number', 'atlas_location_uuid','groundtruth']]
+            testing_pair['label'] = (testing_pair['atlas_location_uuid'] == testing_pair['groundtruth'])
+            testing_pair = testing_pair[['duns_number', 'atlas_location_uuid','label']]
+
+            valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=testing_pair,
+                                   emb_dict=loc_name_dict,df_ensemble=df_ensemble, name='valid',shuffle=False)
+            print('Predictions for city %d' % ind_city)
+            predict(model,criterion,tqdm.tqdm(valid_loader, desc='Validation'),
+                    use_cuda=use_cuda,test_pair=testing_pair[['atlas_location_uuid', 'duns_number']], save_name= pred_save_name[ind_city] , lossType=lossType)
+
     elif args.mode == 'validate':
         topks = [300,1000,600]
 
@@ -239,6 +287,7 @@ def main():
 # #=============================================================================================================================
 def predict(
         model: nn.Module, criterion, predict_loader, use_cuda, test_pair, save_name:str , lossType='softmax') -> Dict[str, float]:
+    topk = 300
     model.eval()
     all_losses, all_predictions, all_targets = [], [], []
     with torch.no_grad():
@@ -278,15 +327,25 @@ def predict(
         all_predictions = (all_predictions + 1)/2 #squeeze to [0,1]
         all_predictions2 = all_predictions.data.cpu().numpy()
 
+    print('saving...')
     dat_pred_pd = pd.DataFrame(data=all_predictions2.reshape(-1,1), columns=['similarity'])
     res_pd = pd.concat([test_pair, dat_pred_pd], axis=1)
+    print('sampling...')
+    #for each location we return topk companies
+    sample_pd = res_pd.sort_values(by=['atlas_location_uuid','similarity'],ascending=False).groupby('atlas_location_uuid').head(topk).reset_index(drop=True)
+    sample_pd.to_csv('sampled_'+save_name )
+    print('saving total data...')
     res_pd.to_csv(save_name)
+
+
+
 
     all_targets =all_targets.data.cpu().numpy()
 
     # save_obj(all_targets,'all_targets')
     # save_obj(all_predictions2,'all_predictions2')
 
+    print('calculating roc')
     fpr, tpr, roc_thresholds = roc_curve(all_targets, all_predictions2)
 
     roc_auc = auc(fpr,tpr)
@@ -361,7 +420,7 @@ def train(args, model: nn.Module, criterion, *, params,
     for epoch in range(epoch, n_epochs + 1):
         model.train()
         tq = tqdm.tqdm(total=(args.epoch_size or
-                              (3000)*len(train_loader) * args.batch_size))
+                              (nPosTr+nNegTr)*len(train_loader) * args.batch_size))
 
         if epoch >= 20 and epoch%2==0:
             lr = lr * 0.9
