@@ -83,15 +83,19 @@ def main():
     #run_root: model/weights root
     run_root = Path(args.run_root)
 
-    df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_all.csv'),index_col=0)
-    df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat.csv'),index_col=0)
-    df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat.csv'),index_col=0)
-    clfile = ['PA.csv', 'SF.csv', 'SJ.csv']
+    df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_82split_5city.csv'),index_col=0)
+    df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat2.csv'),index_col=0)
+    df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat2.csv'),index_col=0)
+    clfile = ['PA.csv', 'SF.csv', 'SJ.csv','LA.csv','NY.csv']
+
+    pred_save_name = ['PA_similarity.csv', 'SF_similarity.csv', 'SJ_similarity.csv','LA_similarity.csv','NY_similarity.csv']
 
 
     if args.ensemble:
         df_ensemble = []
-        ensemble_score = ['PA_comp_loc_score_exclude_self.csv','SJ_comp_loc_score_exclude_self.csv','SF_comp_loc_score_exclude_self.csv']
+        ensemble_score = ['PA_comp_loc_score_exclude_self.csv','SJ_comp_loc_score_exclude_self.csv',
+                          'SF_comp_loc_score_exclude_self.csv',
+                          'LA_comp_loc_score_exclude_self.csv','NY_comp_loc_score_exclude_self.csv']
         for i in range(len(ensemble_score)):
             df_ensemble.append(pd.read_csv(pjoin(TR_DATA_ROOT,ensemble_score[i])))
         df_ensemble = pd.concat(df_ensemble,axis=0).reset_index(drop=True)
@@ -202,6 +206,29 @@ def main():
             validation(model, criterion, tqdm.tqdm(valid_loader, desc='Validation'),
                        use_cuda=use_cuda, lossType=lossType, num_loc=num_loc, topK=topks[ind_city],Query_Company=Query_Company)
 
+    elif args.mode == 'predict_test':
+        for ind_city in [3,4]:
+            pdcl = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
+            all_loc_name = pdcl[['atlas_location_uuid']].groupby(['atlas_location_uuid'])[
+                ['atlas_location_uuid']].first().reset_index(drop=True)
+            all_loc_name['key'] = 0
+            pdcl['key'] = 0
+
+            testing_pair = pd.merge(pdcl, all_loc_name, on='key', how='left',
+                                    suffixes=['_left', '_right']).reset_index(drop=True)
+
+            testing_pair = testing_pair.rename(
+                columns={'atlas_location_uuid_left': 'groundtruth', 'atlas_location_uuid_right': 'atlas_location_uuid'})
+            testing_pair = testing_pair[['duns_number', 'atlas_location_uuid','groundtruth']]
+            testing_pair['label'] = (testing_pair['atlas_location_uuid'] == testing_pair['groundtruth'])
+            testing_pair = testing_pair[['duns_number', 'atlas_location_uuid','label']]
+
+            valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=testing_pair,
+                                   emb_dict=loc_name_dict,df_ensemble=df_ensemble, name='valid',shuffle=False)
+            print('Predictions for city %d' % ind_city)
+            predict(model,criterion,tqdm.tqdm(valid_loader, desc='Validation'),
+                    use_cuda=use_cuda,test_pair=testing_pair[['atlas_location_uuid', 'duns_number']], save_name= pred_save_name[ind_city] , lossType=lossType)
+
 
 #=============================================================================================================================
 #End of main
@@ -210,35 +237,70 @@ def main():
 # #=============================================================================================================================
 # #predict
 # #=============================================================================================================================
-# def predict(model, root: Path, df: pd.DataFrame, out_path: Path,
-#             batch_size: int, tta_code:list , workers: int, use_cuda: bool):
-#
-#     loader = DataLoader(
-#         dataset=TTADataset(root, df, tta_code=tta_code),
-#         shuffle=False,
-#         batch_size=batch_size,
-#         num_workers=workers,
-#     )
-#
-#     model.eval()
-#     all_outputs, all_ids = [], []
-#     with torch.no_grad():
-#         for inputs, ids in tqdm.tqdm(loader, desc='Predict'):
-#             if use_cuda:
-#                 inputs = inputs.cuda()
-#             outputs = torch.sigmoid(model(inputs))
-#             #_, outputs = outputs.topk(1, dim=1, largest=True, sorted=True)
-#             all_outputs.append(outputs.data.cpu().numpy())
-#             all_ids.extend(ids)
-#
-#     df = pd.DataFrame(
-#         data=np.concatenate(all_outputs),
-#         index=all_ids,
-#         columns=map(str, range(N_CLASSES)))
-#
-#     df = mean_df(df)
-#     df.to_hdf(out_path, 'prob', index_label='id')
-#     print('Saved predictions to %s' % out_path)
+def predict(
+        model: nn.Module, criterion, predict_loader, use_cuda, test_pair, save_name:str , lossType='softmax') -> Dict[str, float]:
+    model.eval()
+    all_losses, all_predictions, all_targets = [], [], []
+    with torch.no_grad():
+        for batch_dat in predict_loader:
+            featComp = batch_dat['feat_comp']
+            featLoc = batch_dat['feat_loc']
+            featId = batch_dat['feat_id']
+            targets = batch_dat['target']
+            featEnsemble = batch_dat['feat_ensemble_score']
+            all_targets.append(targets)#torch@cpu
+            if use_cuda:
+                featComp, featLoc, targets, featId,featEnsemble = featComp.cuda(), featLoc.cuda(), targets.cuda(), featId.cuda(),featEnsemble.cuda()
+            model_output = model(feat_comp=featComp, feat_loc=featLoc, id_loc = featId,feat_ensemble_score=featEnsemble)
+            outputs = model_output['outputs']
+
+            if lossType=='softmax':
+                loss = softmax_loss(outputs, targets)
+                all_predictions.append(outputs)
+            else:
+                out_comp_feat = model_output['comp_feat']
+                out_loc_feat = model_output['loc_feat']
+                cos_targets = 2 * targets.float() - 1.0
+                loss = criterion(out_comp_feat, out_loc_feat, cos_targets)
+                all_predictions.append(model_output['outputs_cos'])
+
+            all_losses.append(loss.data.cpu().numpy())
+
+    all_predictions = torch.cat(all_predictions)
+    all_targets = torch.cat(all_targets)#list->torch
+    print('all_predictions.shape: ')
+    print(all_predictions.shape)
+
+
+    if lossType=='softmax':
+        all_predictions2 = all_predictions[:, 1].data.cpu().numpy()
+    else:
+        all_predictions = (all_predictions + 1)/2 #squeeze to [0,1]
+        all_predictions2 = all_predictions.data.cpu().numpy()
+
+    dat_pred_pd = pd.DataFrame(data=all_predictions2.reshape(-1,1), columns=['similarity'])
+    res_pd = pd.concat([test_pair, dat_pred_pd], axis=1)
+    res_pd.to_csv(save_name)
+
+    all_targets =all_targets.data.cpu().numpy()
+
+    # save_obj(all_targets,'all_targets')
+    # save_obj(all_predictions2,'all_predictions2')
+
+    fpr, tpr, roc_thresholds = roc_curve(all_targets, all_predictions2)
+
+    roc_auc = auc(fpr,tpr)
+
+    metrics = {}
+    metrics['valid_f1'] = 0 #fbeta_score(all_targets, all_predictions, beta=1, average='macro')
+    metrics['valid_loss'] = np.mean(all_losses)
+    metrics['valid_top1'] = 0#acc[0].item()
+    metrics['auc'] = roc_auc
+    metrics['valid_top5'] = 0 #acc[1].item()
+
+    print(' | '.join(f'{k} {v:.3f}' for k, v in sorted(metrics.items(), key=lambda kv: -kv[1])))
+
+    return metrics
 
 #=============================================================================================================================
 #train
