@@ -336,6 +336,7 @@ class sub_rec_similar_company(object):
     def get_candidate_location_for_company(self, query_comp_feat):
         sub_pairs = pd.merge(query_comp_feat[['duns_number', self.matching_col]], self.loc_type, on=self.matching_col,
                              how='left', suffixes=['', '_right'])
+        sub_pairs = sub_pairs[sub_pairs['atlas_location_uuid'].notnull()]#sometimes a company may have no location to recommend
         sub_pairs[self.reason_col_name] = 'similar company inside'
         return sub_pairs
 

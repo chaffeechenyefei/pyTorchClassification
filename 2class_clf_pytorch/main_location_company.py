@@ -271,11 +271,13 @@ def main():
             sub_pairs['label'] = 0
             print('sub_pairs:%d'%len(sub_pairs))
 
+            ##merging reason TODO
+
             valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=sub_pairs,
                                    emb_dict=loc_name_dict,df_ensemble=df_ensemble, name='valid',shuffle=False)
             print('Predictions for city %d' % ind_city)
             predict(model,criterion,tqdm.tqdm(valid_loader, desc='Validation'),
-                    use_cuda=use_cuda,test_pair=sub_pairs[['atlas_location_uuid', 'duns_number']], \
+                    use_cuda=use_cuda,test_pair=sub_pairs[['atlas_location_uuid', 'duns_number','reason1']], \
                     save_name= pred_save_name[ind_city] ,pre_name='sub_',sampling=False ,lossType=lossType)
 
     elif args.mode == 'validate':
