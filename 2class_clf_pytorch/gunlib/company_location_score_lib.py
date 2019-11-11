@@ -306,3 +306,67 @@ def translocname2dict(loc_feat:pd.DataFrame)->dict:
     k = zip(loc_name_dict['atlas_location_uuid'].values.tolist(), list(range(len(loc_name_dict))))
     loc_name_dicts = dict(k)
     return loc_name_dicts
+
+
+def generate_loc_type(comp_feat, comp_loc, matching_col):
+    # matching_col = 'major_industry_category'
+    comp_type = comp_feat[['duns_number', matching_col]]
+    comp_type_location = pd.merge(comp_type, comp_loc[['duns_number', 'atlas_location_uuid']], on='duns_number',
+                                  how='inner')
+
+    loc_type = comp_type_location.groupby(['atlas_location_uuid', matching_col]).first().reset_index()[
+        ['atlas_location_uuid', matching_col]]
+    return loc_type
+
+
+class sub_rec_similar_company(object):
+    def __init__(self, comp_feat, comp_loc, matching_col,reason_col_name='reason1'):
+        """
+        comp_feat: original company information
+        comp_loc: company-location affinities of a certain city
+        matching_col = 'major_industry_category' big category
+                    or 'primary_sic_2_digit' more detailed category
+        """
+        self.comp_feat = comp_feat
+        self.comp_loc = comp_loc
+        self.matching_col = matching_col
+        self.reason_col_name = reason_col_name
+        self.loc_type = generate_loc_type(comp_feat, comp_loc, matching_col)
+
+    def get_candidate_location_for_company(self, query_comp_feat):
+        sub_pairs = pd.merge(query_comp_feat[['duns_number', self.matching_col]], self.loc_type, on=self.matching_col,
+                             how='left', suffixes=['', '_right'])
+        sub_pairs[self.reason_col_name] = 'similar company inside'
+        return sub_pairs
+
+
+class global_filter(object):
+    def __init__(self, loc_feat):
+        self.loc_feat = loc_feat
+
+    def filtering(self, key_column, percentile=0.2, mode='gt'):
+        val = self.loc_feat[[key_column]].quantile(q=percentile).item()
+        if mode == 'gt':
+            sub_loc = self.loc_feat[self.loc_feat[key_column] >= val]
+        else:
+            sub_loc = self.loc_feat[self.loc_feat[key_column] <= val]
+
+        self.loc_feat = sub_loc.reset_index(drop=True)
+        return self
+
+    def city_filter(self, city_name, key_column='city'):
+        self.loc_feat = self.loc_feat[self.loc_feat[key_column] == city_name]
+        return self
+
+    def exfiltering(self, loc_feat, key_column, percentile=0.2, mode='gt'):
+        val = loc_feat[[key_column]].quantile(q=percentile).item()
+        if mode == 'gt':
+            sub_loc = self.loc_feat[self.loc_feat[key_column] >= val]
+        else:
+            sub_loc = self.loc_feat[self.loc_feat[key_column] <= val]
+
+        return sub_loc.reset_index(drop=True)
+
+    def end(self):
+        return self.loc_feat
+

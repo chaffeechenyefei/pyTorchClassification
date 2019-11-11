@@ -28,6 +28,7 @@ from gunlib.company_location_score_lib import translocname2dict
 from models.utils import *
 from udf.basic import save_obj,load_obj,calc_topk_acc_cat_all,topk_recall_score_all
 import matplotlib.pyplot as plt
+from gunlib.company_location_score_lib import global_filter,sub_rec_similar_company
 
 # from torch.utils.data import DataLoader
 
@@ -51,7 +52,7 @@ def main():
     #cmd and arg parser
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
-    arg('--mode', choices=['train', 'validate', 'predict_valid', 'predict_test','train_test'], default='train')
+    arg('--mode', choices=['train', 'validate', 'predict_valid', 'predict_test','train_test', 'predict_sub'], default='train')
     arg('--run_root', default='result/location_company')
     arg('--fold', type=int, default=0)
     arg('--model', default='location_recommend_model_v3')
@@ -89,6 +90,9 @@ def main():
     df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat2.csv'),index_col=0)
     df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat2.csv'),index_col=0)
     clfile = ['PA.csv', 'SF.csv', 'SJ.csv','LA.csv','NY.csv']
+    cityname = ['Palo Alto','San Francisco','San Jose','Los Angeles', 'New York']
+    cfile = ['dnb_pa.csv', 'dnb_sf.csv', 'dnb_sj.csv', 'dnb_Los_Angeles.csv', 'dnb_New_York.csv']
+    lfile = 'location_scorecard_190912.csv'
 
     pred_save_name = ['PA_similarity.csv', 'SF_similarity.csv', 'SJ_similarity.csv','LA_similarity.csv','NY_similarity.csv']
 
@@ -238,7 +242,48 @@ def main():
             predict(model,criterion,tqdm.tqdm(valid_loader, desc='Validation'),
                     use_cuda=use_cuda,test_pair=testing_pair[['atlas_location_uuid', 'duns_number']], save_name= pred_save_name[ind_city] , lossType=lossType)
 
+    elif args.mode == 'predict_sub':
+        """
+        """
+        for ind_city in range(5):
+            print('Processing City:%s'%cityname[ind_city])
+            comp_loc = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
+            comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,cfile[ind_city]))
+            loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,lfile))
+
+            print('Filtering')
+            #Global filter:
+            global_ft = global_filter(loc_feat=loc_feat)
+            sub_loc_feat = global_ft\
+                .city_filter(city_name=cityname[ind_city])\
+                .filtering(key_column='pct_masters_degree',percentile=0.2)\
+                .filtering('score_accessibility',0.6).end()
+
+            sub_comp_loc = pd.merge(comp_loc,sub_loc_feat[['atlas_location_uuid']],on='atlas_location_uuid',how='inner',suffixes=['','_right'])
+            print('remaining companies:%d'%len(sub_comp_loc))
+
+            print('Reasoning')
+            #Reason 1:
+            matching_col = 'major_industry_category'
+            recall_com1 = sub_rec_similar_company(comp_feat=comp_feat, comp_loc=sub_comp_loc,
+                                                  matching_col=matching_col)
+            sub_pairs = recall_com1.get_candidate_location_for_company(query_comp_feat=comp_feat)
+            sub_pairs['label'] = 0
+            print('sub_pairs:%d'%len(sub_pairs))
+
+            valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=sub_pairs,
+                                   emb_dict=loc_name_dict,df_ensemble=df_ensemble, name='valid',shuffle=False)
+            print('Predictions for city %d' % ind_city)
+            predict(model,criterion,tqdm.tqdm(valid_loader, desc='Validation'),
+                    use_cuda=use_cuda,test_pair=sub_pairs[['atlas_location_uuid', 'duns_number']], \
+                    save_name= pred_save_name[ind_city] ,pre_name='sub_',sampling=False ,lossType=lossType)
+
     elif args.mode == 'validate':
+        """
+        For test set that each company in test set x all locations only.
+        Because topks recall can not be calculated.
+        But if set topks = [0,0,0], roc_auc can be calculated.
+        """
         topks = [300,1000,600]
 
         Query_Company = not args.query_location
@@ -255,6 +300,9 @@ def main():
                        use_cuda=use_cuda, lossType=lossType, num_loc=num_loc, topK=topks[ind_city],Query_Company=Query_Company)
 
     elif args.mode == 'predict_test':
+        """
+        It will generate a score for each company with all the locations(including companies/locations in training set)
+        """
         for ind_city in [3,4]:
             pdcl = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
             all_loc_name = pdcl[['atlas_location_uuid']].groupby(['atlas_location_uuid'])[
@@ -286,7 +334,7 @@ def main():
 # #predict
 # #=============================================================================================================================
 def predict(
-        model: nn.Module, criterion, predict_loader, use_cuda, test_pair, save_name:str , lossType='softmax') -> Dict[str, float]:
+        model: nn.Module, criterion, predict_loader, use_cuda, test_pair, save_name:str , pre_name:str = '',lossType='softmax',sampling=True) -> Dict[str, float]:
     topk = 300
     model.eval()
     all_losses, all_predictions, all_targets = [], [], []
@@ -322,6 +370,7 @@ def predict(
 
 
     if lossType=='softmax':
+        all_predictions = F.softmax(all_predictions,dim=1)
         all_predictions2 = all_predictions[:, 1].data.cpu().numpy()
     else:
         all_predictions = (all_predictions + 1)/2 #squeeze to [0,1]
@@ -330,12 +379,13 @@ def predict(
     print('saving...')
     dat_pred_pd = pd.DataFrame(data=all_predictions2.reshape(-1,1), columns=['similarity'])
     res_pd = pd.concat([test_pair, dat_pred_pd], axis=1)
-    print('sampling...')
-    #for each location we return topk companies
-    sample_pd = res_pd.sort_values(by=['atlas_location_uuid','similarity'],ascending=False).groupby('atlas_location_uuid').head(topk).reset_index(drop=True)
-    sample_pd.to_csv('sampled_'+save_name )
+    if sampling:
+        print('sampling...')
+        #for each location we return topk companies
+        sample_pd = res_pd.sort_values(by=['atlas_location_uuid','similarity'],ascending=False).groupby('atlas_location_uuid').head(topk).reset_index(drop=True)
+        sample_pd.to_csv('sampled_'+save_name )
     print('saving total data...')
-    res_pd.to_csv(save_name)
+    res_pd.to_csv(pre_name+save_name)
 
 
 
@@ -450,6 +500,7 @@ def train(args, model: nn.Module, criterion, *, params,
                 # common_feat_comp, common_feat_loc, feat_comp_loc, outputs = model(feat_comp=featComp, feat_loc=featLoc)
                 model_output = model(feat_comp = featComp, feat_loc = featLoc, id_loc = featId,feat_ensemble_score=featEnsemble)
                 outputs = model_output['outputs']
+
 
                 # outputs = outputs.squeeze()
 
