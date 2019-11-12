@@ -251,12 +251,15 @@ def main():
             comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,cfile[ind_city]))
             loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,lfile))
 
+            #we only focus on buildings with companies inside
+            loc_feat = loc_feat.merge(comp_loc[['atlas_location_uuid']].groupby('atlas_location_uuid').first().reset_index(), on='atlas_location_uuid',how='inner',suffixes=['','_right'])
+
             print('Filtering')
-            #Global filter:
+            #Global filter: master degree!
             global_ft = global_filter(loc_feat=loc_feat)
             sub_loc_feat = global_ft\
                 .city_filter(city_name=cityname[ind_city])\
-                .filtering(key_column='pct_masters_degree',percentile=0.2)\
+                .filtering(key_column='pct_masters_degree',percentile=0.5)\
                 .filtering('score_accessibility',0.6).end()
 
             sub_comp_loc = pd.merge(comp_loc,sub_loc_feat[['atlas_location_uuid']],on='atlas_location_uuid',how='inner',suffixes=['','_right'])
