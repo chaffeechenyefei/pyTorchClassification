@@ -320,7 +320,7 @@ def generate_loc_type(comp_feat, comp_loc, matching_col):
 
 
 class sub_rec_similar_company(object):
-    def __init__(self, comp_feat, comp_loc, matching_col,reason_col_name='reason1'):
+    def __init__(self, comp_feat, comp_loc, matching_col,reason_col_name='reason'):
         """
         comp_feat: original company information
         comp_loc: company-location affinities of a certain city
@@ -356,7 +356,7 @@ class global_filter(object):
         return self
 
     def city_filter(self, city_name, key_column='city'):
-        self.loc_feat = self.loc_feat[self.loc_feat[key_column] == city_name]
+        self.loc_feat = self.loc_feat[self.loc_feat[key_column] == city_name].reset_index(drop=True)
         return self
 
     def exfiltering(self, loc_feat, key_column, percentile=0.2, mode='gt'):
@@ -371,3 +371,47 @@ class global_filter(object):
     def end(self):
         return self.loc_feat
 
+
+class sub_rec_condition(object):
+    def __init__(self, loc_feat):
+        """
+        comp_loc: company-location affinities of a certain city
+        cond_col = column of location used for filtering
+        """
+        self.loc_feat = loc_feat
+        self.cond_col = []
+        self.reason = []
+
+    def filtering(self, cond_col, percentile=0.5, reason='many things'):
+        self.cond_col.append(cond_col)
+        val = self.loc_feat[[cond_col]].quantile(q=percentile).item()
+        if max(val, 10):
+            self.loc_feat = self.loc_feat[self.loc_feat[cond_col] >= val].reset_index(drop=True)
+            self.reason.append(reason)
+        return self
+
+    def exfiltering(self, cond_col, percentile=0.6, reason='many things'):
+        self.cond_col.append(cond_col)
+        val = self.loc_feat[[cond_col]].quantile(q=percentile).item()
+        if max(val, 10):
+            sub_loc = self.loc_feat[self.loc_feat[cond_col] >= val].reset_index(drop=True)
+        sub_loc['reason'] = reason
+        return sub_loc[['atlas_location_uuid', 'reason']]
+
+    def end(self):
+        return self.loc_feat
+
+#======================================================================================================================
+def ab(df):
+    return ','.join(df.values)
+
+
+def merge_rec_reason_rowise(sub_pairs, group_cols: list, merge_col: str):
+    return sub_pairs.groupby(group_cols)[merge_col].apply(ab).reset_index()
+
+
+def merge_rec_reason_colwise(sub_pairs, cols=['reason1', 'reason2']):
+    for name in cols:
+        sub_pairs['reason'] = sub_pairs[cols[0]].str.cat(sub_pairs[cols[1]], sep=',')
+    return sub_pairs
+#======================================================================================================================

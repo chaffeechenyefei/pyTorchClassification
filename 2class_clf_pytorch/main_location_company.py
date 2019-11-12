@@ -28,7 +28,7 @@ from gunlib.company_location_score_lib import translocname2dict
 from models.utils import *
 from udf.basic import save_obj,load_obj,calc_topk_acc_cat_all,topk_recall_score_all
 import matplotlib.pyplot as plt
-from gunlib.company_location_score_lib import global_filter,sub_rec_similar_company
+from gunlib.company_location_score_lib import global_filter,sub_rec_similar_company,sub_rec_condition,merge_rec_reason_rowise
 
 # from torch.utils.data import DataLoader
 
@@ -245,7 +245,7 @@ def main():
     elif args.mode == 'predict_sub':
         """
         """
-        for ind_city in range(5):
+        for ind_city in range(1):
             print('Processing City:%s'%cityname[ind_city])
             comp_loc = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
             comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,cfile[ind_city]))
@@ -264,20 +264,46 @@ def main():
 
             print('Reasoning')
             #Reason 1:
-            matching_col = 'major_industry_category'
+            print('Customized Reason')
+            matching_col = 'primary_sic_2_digit'
             recall_com1 = sub_rec_similar_company(comp_feat=comp_feat, comp_loc=sub_comp_loc,
-                                                  matching_col=matching_col)
+                                                  matching_col=matching_col,reason_col_name='reason')
             sub_pairs = recall_com1.get_candidate_location_for_company(query_comp_feat=comp_feat)
-            sub_pairs['label'] = 0
             print('sub_pairs:%d'%len(sub_pairs))
 
+            #Reason2:
+            print('General Reason')
+            recall_com2 = sub_rec_condition(sub_loc_feat)
+            sub_loc_recall_com2 = recall_com2.exfiltering('num_fitness_gyms', percentile=0.8, reason='Enough GYM')
+            sub_loc_recall_com3 = recall_com2.exfiltering('num_drinking_places', percentile=0.8,
+                                                          reason='Entertainment Available')
+            sub_loc_recall_com4 = recall_com2.exfiltering('num_eating_places', percentile=0.8, reason='Easy for lunch')
+            print('recall_location_size: %d, %d, %d'%(len(sub_loc_recall_com2), len(sub_loc_recall_com3), len(sub_loc_recall_com4.shape)))
+
+            print('Merging general reasons')
+            sub_loc_recall = pd.concat([sub_loc_recall_com2, sub_loc_recall_com3, sub_loc_recall_com4], axis=0)
+            sub_loc_recall = merge_rec_reason_rowise(sub_loc_recall, group_cols=['atlas_location_uuid'],
+                                                     merge_col='reason')
+            print('Making pairs for general reasons')
+            comp_feat['key'] = 0
+            sub_loc_recall['key'] = 0
+            sub_pairs2 = pd.merge(comp_feat[['duns_number', 'key']], sub_loc_recall, on='key', how='left',
+                                       suffixes=['', '_right'])
+
             ##merging reason TODO
+            print('Union Customized Reason and general reason')
+            sub_pairs = pd.concat([sub_pairs, sub_pairs2], axis=0, sort=False)
+
+            sub_pairs = merge_rec_reason_rowise(sub_pairs, group_cols=['duns_number', 'atlas_location_uuid'],
+                                                    merge_col='reason')
+            sub_pairs['label'] = 0
+            print('Total sub_pairs:%d' % len(sub_pairs))
 
             valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=sub_pairs,
                                    emb_dict=loc_name_dict,df_ensemble=df_ensemble, name='valid',shuffle=False)
             print('Predictions for city %d' % ind_city)
             predict(model,criterion,tqdm.tqdm(valid_loader, desc='Validation'),
-                    use_cuda=use_cuda,test_pair=sub_pairs[['atlas_location_uuid', 'duns_number','reason1']], \
+                    use_cuda=use_cuda,test_pair=sub_pairs[['atlas_location_uuid', 'duns_number','reason']], \
                     save_name= pred_save_name[ind_city] ,pre_name='sub_',sampling=False ,lossType=lossType)
 
     elif args.mode == 'validate':
@@ -305,7 +331,7 @@ def main():
         """
         It will generate a score for each company with all the locations(including companies/locations in training set)
         """
-        for ind_city in [3,4]:
+        for ind_city in [0,1,2]:
             pdcl = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
             all_loc_name = pdcl[['atlas_location_uuid']].groupby(['atlas_location_uuid'])[
                 ['atlas_location_uuid']].first().reset_index(drop=True)
@@ -384,7 +410,8 @@ def predict(
     if sampling:
         print('sampling...')
         #for each location we return topk companies
-        sample_pd = res_pd.sort_values(by=['atlas_location_uuid','similarity'],ascending=False).groupby('atlas_location_uuid').head(topk).reset_index(drop=True)
+        # sample_pd = res_pd.sort_values(by=['atlas_location_uuid','similarity'],ascending=False).groupby('atlas_location_uuid').head(topk).reset_index(drop=True)
+        sample_pd = res_pd.groupby('atlas_location_uuid').apply(lambda x: x.nlargest(topk,['similarity'])).reset_index(drop=True)
         sample_pd.to_csv('sampled_'+save_name )
     print('saving total data...')
     res_pd.to_csv(pre_name+save_name)
