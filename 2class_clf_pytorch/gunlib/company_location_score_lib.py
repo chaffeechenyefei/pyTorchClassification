@@ -333,11 +333,11 @@ class sub_rec_similar_company(object):
         self.reason_col_name = reason_col_name
         self.loc_type = generate_loc_type(comp_feat, comp_loc, matching_col)
 
-    def get_candidate_location_for_company(self, query_comp_feat):
+    def get_candidate_location_for_company(self, query_comp_feat,reason='similar company inside'):
         sub_pairs = pd.merge(query_comp_feat[['duns_number', self.matching_col]], self.loc_type, on=self.matching_col,
                              how='left', suffixes=['', '_right'])
         sub_pairs = sub_pairs[sub_pairs['atlas_location_uuid'].notnull()]#sometimes a company may have no location to recommend
-        sub_pairs[self.reason_col_name] = 'similar company inside'
+        sub_pairs[self.reason_col_name] = reason
         return sub_pairs
 
 
@@ -410,9 +410,8 @@ def merge_rec_reason_rowise(sub_pairs, group_cols: list, merge_col: str):
     return sub_pairs.groupby(group_cols)[merge_col].apply(ab).reset_index()
 
 
-def merge_rec_reason_colwise(sub_pairs, cols=['reason1', 'reason2']):
-    for name in cols:
-        sub_pairs['reason'] = sub_pairs[cols[0]].str.cat(sub_pairs[cols[1]], sep=',')
+def merge_rec_reason_colwise(sub_pairs, cols=['reason1', 'reason2'],dst_col = 'reason',sep=','):
+    sub_pairs[dst_col] = sub_pairs[cols[0]].str.cat(sub_pairs[cols[1]], sep=sep)
     return sub_pairs
 #======================================================================================================================
 

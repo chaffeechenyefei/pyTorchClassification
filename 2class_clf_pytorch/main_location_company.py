@@ -94,13 +94,13 @@ def main():
     global model_name
     model_name = args.model
 
-    df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_82split_5city.csv'),index_col=0)
-    df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat2.csv'),index_col=0)
-    df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat2.csv'),index_col=0)
-    clfile = ['PA.csv', 'SF.csv', 'SJ.csv','LA.csv','NY.csv']
+    df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_82split_5city_191113.csv'),index_col=0)
+    df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat3.csv'),index_col=0)
+    df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat3.csv'),index_col=0)
+    clfile = ['PA_191113.csv', 'SF_191113.csv', 'SJ_191113.csv','LA_191113.csv','NY_191113.csv']
     cityname = ['Palo Alto','San Francisco','San Jose','Los Angeles', 'New York']
     cfile = ['dnb_pa.csv', 'dnb_sf.csv', 'dnb_sj.csv', 'dnb_Los_Angeles.csv', 'dnb_New_York.csv']
-    lfile = 'location_scorecard_190912.csv'
+    lfile = 'location_scorecard_191113.csv'
 
     pred_save_name = ['PA_similarity.csv', 'SF_similarity.csv', 'SJ_similarity.csv','LA_similarity.csv','NY_similarity.csv']
 
@@ -273,8 +273,10 @@ def main():
 
             if wework_location_only:
                 sub_loc_feat_ww = sub_loc_feat[sub_loc_feat['is_wework']==True]
-
-            sub_comp_loc = pd.merge(comp_loc,sub_loc_feat_ww[['atlas_location_uuid']],on='atlas_location_uuid',how='inner',suffixes=['','_right'])
+                sub_comp_loc = pd.merge(comp_loc,sub_loc_feat_ww[['atlas_location_uuid']],on='atlas_location_uuid',how='inner',suffixes=['','_right'])
+            else:
+                sub_comp_loc = pd.merge(comp_loc, sub_loc_feat[['atlas_location_uuid']], on='atlas_location_uuid',
+                                        how='inner', suffixes=['', '_right'])
 
             print('remaining companies:%d'%len(sub_comp_loc))
 
@@ -314,7 +316,7 @@ def main():
             ##merging reason TODO
             print('Union Customized Reason and general reason')
             sub_pairs = pd.concat([sub_pairs, sub_pairs2], axis=0, sort=False)
-
+            ##not very efficient
             sub_pairs = merge_rec_reason_rowise(sub_pairs, group_cols=['duns_number', 'atlas_location_uuid'],
                                                     merge_col='reason')
             sub_pairs['label'] = 0
