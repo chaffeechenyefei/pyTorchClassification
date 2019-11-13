@@ -90,6 +90,8 @@ def main():
     #run_root: model/weights root
     run_root = Path(args.run_root)
 
+
+    global model_name
     model_name = args.model
 
     df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_82split_5city.csv'),index_col=0)
@@ -251,7 +253,7 @@ def main():
     elif args.mode == 'predict_sub':
         """
         """
-        for ind_city in range(1):
+        for ind_city in range(5):
             print('Processing City:%s'%cityname[ind_city])
             comp_loc = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
             comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,cfile[ind_city]))
@@ -288,10 +290,10 @@ def main():
             #Reason2:
             print('General Reason')
             recall_com2 = sub_rec_condition(sub_loc_feat)
-            sub_loc_recall_com2 = recall_com2.exfiltering('num_fitness_gyms', percentile=0.8, reason='Enough GYM')
-            sub_loc_recall_com3 = recall_com2.exfiltering('num_drinking_places', percentile=0.8,
+            sub_loc_recall_com2 = recall_com2.exfiltering('num_fitness_gyms', percentile=0.5, reason='Enough GYM')
+            sub_loc_recall_com3 = recall_com2.exfiltering('num_drinking_places', percentile=0.5,
                                                           reason='Entertainment Available')
-            sub_loc_recall_com4 = recall_com2.exfiltering('num_eating_places', percentile=0.8, reason='Easy for lunch')
+            sub_loc_recall_com4 = recall_com2.exfiltering('num_eating_places', percentile=0.5, reason='Easy for lunch')
             print('recall_location_size: %d, %d, %d'%(len(sub_loc_recall_com2), len(sub_loc_recall_com3), len(sub_loc_recall_com4.shape)))
 
             print('Merging general reasons')
@@ -299,7 +301,9 @@ def main():
             sub_loc_recall = merge_rec_reason_rowise(sub_loc_recall, group_cols=['atlas_location_uuid'],
                                                      merge_col='reason')
             if wework_location_only:
-                sub_loc_recall = sub_loc_feat.merge(sub_loc_feat_ww[['atlas_location_uuid']],on='atlas_location_uuid',how='inner',suffixes=['','_right'])
+                sub_loc_recall = sub_loc_recall.merge(sub_loc_feat_ww[['atlas_location_uuid']],on='atlas_location_uuid',how='inner',suffixes=['','_right'])
+            print('sub_loc_recall sized %d' % len(sub_loc_recall))
+            # print(sub_loc_recall.columns)
 
             print('Making pairs for general reasons')
             comp_feat['key'] = 0
@@ -347,8 +351,9 @@ def main():
     elif args.mode == 'predict_test':
         """
         It will generate a score for each company with all the locations(including companies/locations in training set)
+        or locations of ww only
         """
-        for ind_city in [0,1,2]:
+        for ind_city in [0,1,2,3,4]:
             pdcl = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
             all_loc_name = pdcl[['atlas_location_uuid']].groupby(['atlas_location_uuid'])[
                 ['atlas_location_uuid']].first().reset_index(drop=True)
