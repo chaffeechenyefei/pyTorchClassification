@@ -28,7 +28,7 @@ from gunlib.company_location_score_lib import translocname2dict
 from models.utils import *
 from udf.basic import save_obj,load_obj,calc_topk_acc_cat_all,topk_recall_score_all
 import matplotlib.pyplot as plt
-from gunlib.company_location_score_lib import global_filter,sub_rec_similar_company,sub_rec_condition,merge_rec_reason_rowise
+from gunlib.company_location_score_lib import global_filter,sub_rec_similar_company,sub_rec_condition,merge_rec_reason_rowise,reason_json_format
 
 # from torch.utils.data import DataLoader
 
@@ -45,6 +45,10 @@ N_CLASSES = 2#253#109
 
 nPosTr = 1000
 nNegTr = 2000
+
+model_name = '' #same as main cmd --model XXX
+wework_location_only = True
+
 #=============================================================================================================================
 #main
 #=============================================================================================================================
@@ -85,6 +89,8 @@ def main():
     args = parser.parse_args()
     #run_root: model/weights root
     run_root = Path(args.run_root)
+
+    model_name = args.model
 
     df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_82split_5city.csv'),index_col=0)
     df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat2.csv'),index_col=0)
@@ -258,11 +264,16 @@ def main():
             #Global filter: master degree!
             global_ft = global_filter(loc_feat=loc_feat)
             sub_loc_feat = global_ft\
-                .city_filter(city_name=cityname[ind_city])\
-                .filtering(key_column='pct_masters_degree',percentile=0.5)\
-                .filtering('score_accessibility',0.6).end()
+                .city_filter(city_name=cityname[ind_city]).end()
+                # .filtering(key_column='pct_masters_degree',percentile=0.5)\
+                # .filtering('score_accessibility',0.6).end()
 
-            sub_comp_loc = pd.merge(comp_loc,sub_loc_feat[['atlas_location_uuid']],on='atlas_location_uuid',how='inner',suffixes=['','_right'])
+
+            if wework_location_only:
+                sub_loc_feat_ww = sub_loc_feat[sub_loc_feat['is_wework']==True]
+
+            sub_comp_loc = pd.merge(comp_loc,sub_loc_feat_ww[['atlas_location_uuid']],on='atlas_location_uuid',how='inner',suffixes=['','_right'])
+
             print('remaining companies:%d'%len(sub_comp_loc))
 
             print('Reasoning')
@@ -287,6 +298,9 @@ def main():
             sub_loc_recall = pd.concat([sub_loc_recall_com2, sub_loc_recall_com3, sub_loc_recall_com4], axis=0)
             sub_loc_recall = merge_rec_reason_rowise(sub_loc_recall, group_cols=['atlas_location_uuid'],
                                                      merge_col='reason')
+            if wework_location_only:
+                sub_loc_recall = sub_loc_feat.merge(sub_loc_feat_ww[['atlas_location_uuid']],on='atlas_location_uuid',how='inner',suffixes=['','_right'])
+
             print('Making pairs for general reasons')
             comp_feat['key'] = 0
             sub_loc_recall['key'] = 0
@@ -338,6 +352,12 @@ def main():
             pdcl = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
             all_loc_name = pdcl[['atlas_location_uuid']].groupby(['atlas_location_uuid'])[
                 ['atlas_location_uuid']].first().reset_index(drop=True)
+
+            if wework_location_only:
+                loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT, lfile))[['atlas_location_uuid','is_wework']]
+                loc_ww = loc_feat[loc_feat['is_wework']==True]
+                all_loc_name = all_loc_name.merge(loc_ww,on='atlas_location_uuid',how='inner',suffixes=['','_right'])[['atlas_location_uuid']]
+
             all_loc_name['key'] = 0
             pdcl['key'] = 0
 
@@ -410,6 +430,13 @@ def predict(
     print('saving...')
     dat_pred_pd = pd.DataFrame(data=all_predictions2.reshape(-1,1), columns=['similarity'])
     res_pd = pd.concat([test_pair, dat_pred_pd], axis=1)
+
+    if 'reason' in res_pd.columns:
+        res_pd = reason_json_format(res_pd,col_name='reason')
+        res_pd.rename(columns={'duns_number':'compony_id',\
+                               'reason':'notes'})
+        res_pd['algorithm'] = model_name
+
     if sampling:
         print('sampling...')
         #for each location we return topk companies

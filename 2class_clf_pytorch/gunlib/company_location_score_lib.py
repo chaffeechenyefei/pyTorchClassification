@@ -415,3 +415,18 @@ def merge_rec_reason_colwise(sub_pairs, cols=['reason1', 'reason2']):
         sub_pairs['reason'] = sub_pairs[cols[0]].str.cat(sub_pairs[cols[1]], sep=',')
     return sub_pairs
 #======================================================================================================================
+
+def list2json(x):
+    k = ''
+    ltx = x.split(',')
+    for item in ltx:
+        if k != '':
+            k = k + ',' + "'"+item+"'"
+        else:
+            k = "'"+item+"'"
+    k = '['+k+']'
+    return k
+
+def reason_json_format(df,col_name:str='reason'):
+    df[col_name] = df[col_name].apply(lambda x: '{reason:' + list2json(x) + '}')
+    return df
