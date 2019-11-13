@@ -94,7 +94,7 @@ def main():
     global model_name
     model_name = args.model
 
-    df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_82split_5city_191113.csv'),index_col=0)
+    df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_82split_191113.csv'),index_col=0)
     df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat3.csv'),index_col=0)
     df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat3.csv'),index_col=0)
     clfile = ['PA_191113.csv', 'SF_191113.csv', 'SJ_191113.csv','LA_191113.csv','NY_191113.csv']
