@@ -373,8 +373,15 @@ def main():
             valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=testing_pair,
                                    emb_dict=loc_name_dict,df_ensemble=df_ensemble, name='valid',shuffle=False)
             print('Predictions for city %d' % ind_city)
+
+            if wework_location_only:
+                pre_name = 'ww_'
+            else:
+                pre_name = ''
+
             predict(model,criterion,tqdm.tqdm(valid_loader, desc='Validation'),
-                    use_cuda=use_cuda,test_pair=testing_pair[['atlas_location_uuid', 'duns_number']], save_name= pred_save_name[ind_city] , lossType=lossType)
+                    use_cuda=use_cuda,test_pair=testing_pair[['atlas_location_uuid', 'duns_number']], pre_name=pre_name,\
+                    save_name= pred_save_name[ind_city] , lossType=lossType)
 
 
 #=============================================================================================================================
@@ -442,7 +449,7 @@ def predict(
         #for each location we return topk companies
         # sample_pd = res_pd.sort_values(by=['atlas_location_uuid','similarity'],ascending=False).groupby('atlas_location_uuid').head(topk).reset_index(drop=True)
         sample_pd = res_pd.groupby('atlas_location_uuid').apply(lambda x: x.nlargest(topk,['similarity'])).reset_index(drop=True)
-        sample_pd.to_csv('sampled_'+save_name )
+        sample_pd.to_csv('sampled_' + pre_name + save_name )
     print('saving total data...')
     res_pd.to_csv(pre_name+save_name)
 
@@ -669,6 +676,7 @@ def validation(
     print(all_predictions.shape)
 
     if lossType=='softmax':
+        all_predictions = F.softmax(all_predictions, dim=1)
         all_predictions2 = all_predictions[:, 1].data.cpu().numpy()
     else:
         all_predictions = (all_predictions + 1)/2 #squeeze to [0,1]
