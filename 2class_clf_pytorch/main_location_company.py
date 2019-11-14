@@ -80,6 +80,7 @@ def main():
     arg('--sample_rate',type=float,default=1.0)#sample part of testing data for evaluating during training
     arg('--testStep',type=int,default=500000)
     arg('--query_location',action='store_true',help='use location as query')
+    arg('--apps',type=str,default='_191114.csv')
 
 
 
@@ -94,16 +95,17 @@ def main():
     global model_name
     model_name = args.model
 
-    df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_82split_191113.csv'),index_col=0)
-    df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat3.csv'),index_col=0)
-    df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat3.csv'),index_col=0)
-    clfile = ['PA_191113.csv', 'SF_191113.csv', 'SJ_191113.csv','LA_191113.csv','NY_191113.csv']
+    df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_82split'+args.apps),index_col=0)
+    df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat'+args.apps),index_col=0)
+    df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat'+args.apps),index_col=0)
+    clfile = ['PA', 'SF', 'SJ','LA','NY']
+    clfile = [ c + args.apps for c in clfile ]
     cityname = ['Palo Alto','San Francisco','San Jose','Los Angeles', 'New York']
     cfile = ['dnb_pa.csv', 'dnb_sf.csv', 'dnb_sj.csv', 'dnb_Los_Angeles.csv', 'dnb_New_York.csv']
     lfile = 'location_scorecard_191113.csv'
 
-    pred_save_name = ['PA_similarity.csv', 'SF_similarity.csv', 'SJ_similarity.csv','LA_similarity.csv','NY_similarity.csv']
-
+    # pred_save_name = ['PA_similarity', 'SF_similarity', 'SJ_similarity.csv','LA_similarity.csv','NY_similarity.csv']
+    pred_save_name = [ c + '_similarity'+args.apps for c in clfile ]
 
     if args.ensemble:
         df_ensemble = []

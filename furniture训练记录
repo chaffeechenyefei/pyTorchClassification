@@ -93,5 +93,5 @@ python3 main_location_company.py --model location_recommend_model_v6 --run_root 
 
 python3 main_location_company.py --model location_recommend_model_v6 --run_root result/location_recommend_model_v6_5city --lr 0.01 --mode predict_sub --ckpt model_loss_best.pt
 
-
+nohup python3 -u main_location_company.py --model location_recommend_model_v6 --run_root result/location_recommend_model_v6_5city_191113 --lr 0.01 --mode train >lrm_5c.out 2>lrm_5c.err &
 

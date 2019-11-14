@@ -551,19 +551,33 @@ class TrainDatasetLocationRS(Dataset):
 
             #generate negative sample from positive seed
             twin_dat = pd.merge(dat1, dat2, on='city', how='left', suffixes=['_left', '_right'])
-            twin_dat = twin_dat[twin_dat['atlas_location_uuid_left'] != twin_dat['atlas_location_uuid_right']]
-            # print(len(twin_dat))
-            # twin_dat.head()
-            neg_dat = twin_dat[['duns_number_left', 'atlas_location_uuid_right']].sample(n=min(self._negN,len(twin_dat))).reset_index(
-                drop=True)
-            neg_dat = neg_dat.rename(
-                columns={'duns_number_left': 'duns_number', 'atlas_location_uuid_right': 'atlas_location_uuid',
-                         'label_left': 'label', 'fold_left': 'fold', 'groundtruth_left': 'groundtruth',
-                         'city_left': 'city'})
-            neg_dat['label'] = 0
-            # neg_dat.head()
-            # len(neg_dat)
-            pos_dat = dat1[['duns_number', 'atlas_location_uuid', 'label']]
+            # twin_dat = twin_dat[twin_dat['atlas_location_uuid_left'] != twin_dat['atlas_location_uuid_right']]
+            pot_neg_datA = twin_dat[
+                ['duns_number_left', 'atlas_location_uuid_right', 'longitude_loc_right', 'latitude_loc_right']] \
+                .rename(columns={'duns_number_left': 'duns_number', 'atlas_location_uuid_right': 'atlas_location_uuid'})
+
+            pot_neg_datB = twin_dat[
+                ['duns_number_right', 'atlas_location_uuid_left', 'longitude_loc_left', 'latitude_loc_left']] \
+                .rename(columns={'duns_number_right': 'duns_number', 'atlas_location_uuid_left': 'atlas_location_uuid'})
+
+            pot_neg_dat = pd.concat([pot_neg_datA, pot_neg_datB], axis=0)
+            pot_neg_dat['label'] = 0
+            dat1['label'] = 1
+
+            # col alignment
+            col_list = ['duns_number', 'atlas_location_uuid', 'label']
+            dat1 = dat1[col_list]
+            pot_neg_dat = pot_neg_dat[col_list]
+
+            # clean pos dat in neg dat
+            neg_dat = pd.merge(pot_neg_dat, dat1, on=['duns_number', 'atlas_location_uuid'], how='left',
+                               suffixes=['', '_right']).reset_index(drop=True)
+            neg_dat['label'] = neg_dat['label'].fillna(0)
+            neg_dat = neg_dat[neg_dat['label_right'] != 1]
+
+            neg_dat = neg_dat[['duns_number', 'atlas_location_uuid','label']].sample(n=min(self._negN, len(neg_dat))).reset_index(drop=True)
+
+            pos_dat = dat1[col_list]
             res_dat = pd.concat([pos_dat, neg_dat], axis=0)
             res_dat = res_dat.sample(frac=1).reset_index(drop=True)
             Label = res_dat[['label']].to_numpy()
