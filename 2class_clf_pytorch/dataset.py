@@ -553,11 +553,11 @@ class TrainDatasetLocationRS(Dataset):
             twin_dat = pd.merge(dat1, dat2, on='city', how='left', suffixes=['_left', '_right'])
             # twin_dat = twin_dat[twin_dat['atlas_location_uuid_left'] != twin_dat['atlas_location_uuid_right']]
             pot_neg_datA = twin_dat[
-                ['duns_number_left', 'atlas_location_uuid_right', 'longitude_loc_right', 'latitude_loc_right']] \
+                ['duns_number_left', 'atlas_location_uuid_right']] \
                 .rename(columns={'duns_number_left': 'duns_number', 'atlas_location_uuid_right': 'atlas_location_uuid'})
 
             pot_neg_datB = twin_dat[
-                ['duns_number_right', 'atlas_location_uuid_left', 'longitude_loc_left', 'latitude_loc_left']] \
+                ['duns_number_right', 'atlas_location_uuid_left']] \
                 .rename(columns={'duns_number_right': 'duns_number', 'atlas_location_uuid_left': 'atlas_location_uuid'})
 
             pot_neg_dat = pd.concat([pot_neg_datA, pot_neg_datB], axis=0)

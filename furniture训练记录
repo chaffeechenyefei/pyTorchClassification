@@ -79,6 +79,13 @@ Conclusion: netvlad can be used as traditional toolbox where features are fixed 
 必须先进行attention模型的预训练。
 
 
+##Notes:
+location_recommend_model_v6_5city：基于location_scorecard_190912的结果，一个company唯一确定一个location
+location_recommend_model_v6_5city_191113：基于location_scorecard_1901113的结果，一个company唯一确定一个location。新增了ww的location。
+上述虽保证了一个company一个location，但存在location没有匹配上任何company的现象。
+下一步主要解决这个问题，放开一个company一个location的限制。
+
+
 nohup python3 -u main_location_company.py --model location_recommend_model_v5 --run_root result/location_recommend_model_v5 --lr 0.01 --cos_sim_loss --testStep 20000 > nohup.out 2> nohup.err &
 
 python3 main_location_company.py --model location_recommend_model_v6 --run_root result/location_recommend_model_v6 --lr 0.01
@@ -94,4 +101,10 @@ python3 main_location_company.py --model location_recommend_model_v6 --run_root 
 python3 main_location_company.py --model location_recommend_model_v6 --run_root result/location_recommend_model_v6_5city --lr 0.01 --mode predict_sub --ckpt model_loss_best.pt
 
 nohup python3 -u main_location_company.py --model location_recommend_model_v6 --run_root result/location_recommend_model_v6_5city_191113 --lr 0.01 --mode train >lrm_5c.out 2>lrm_5c.err &
+python3 main_location_company.py --model location_recommend_model_v6 --run_root result/location_recommend_model_v6_5city_191113 --lr 0.01 --mode predict_test --ckpt model_loss_best.pt
+
+nohup python3 -u main_location_company.py --model location_recommend_model_v6 --run_root result/location_recommend_model_v6_191114 --lr 0.01 --mode train --apps _191114.csv >lrm_5c.out 2>lrm_5c.err &
+
+
+python3 linkCompanyAndLocation_v2_focus_on_location.py --run_root ~/location_recommender_system/ --geo_bit 7
 
