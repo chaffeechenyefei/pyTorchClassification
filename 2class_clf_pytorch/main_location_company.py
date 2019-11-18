@@ -105,7 +105,7 @@ def main():
     lfile = 'location_scorecard_191113.csv'
 
     # pred_save_name = ['PA_similarity', 'SF_similarity', 'SJ_similarity.csv','LA_similarity.csv','NY_similarity.csv']
-    pred_save_name = [ c.replace('.csv','') + '_similarity'+args.apps for c in clfile ]
+    pred_save_name = [ c.replace(args.apps,'') + '_similarity'+args.apps for c in clfile ]
 
     if args.ensemble:
         df_ensemble = []
@@ -232,6 +232,7 @@ def main():
 
         for ind_city in [3,4]:
             pdcl = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
+            pdcl = pdcl.groupby(['atlas_location_uuid', 'duns_number']).first().reset_index(drop=True)
             all_loc_name = pdcl[['atlas_location_uuid']].groupby(['atlas_location_uuid'])[
                 ['atlas_location_uuid']].first().reset_index(drop=True)
             all_loc_name['key'] = 0
@@ -359,6 +360,8 @@ def main():
         """
         for ind_city in [0,1,2,3,4]:
             pdcl = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
+            # in case of multi-mapping
+            pdcl = pdcl.groupby(['atlas_location_uuid', 'duns_number']).first().reset_index(drop=True)
             all_loc_name = pdcl[['atlas_location_uuid']].groupby(['atlas_location_uuid'])[
                 ['atlas_location_uuid']].first().reset_index(drop=True)
 
