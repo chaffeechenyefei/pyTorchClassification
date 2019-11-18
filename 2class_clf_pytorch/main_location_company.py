@@ -49,6 +49,8 @@ nNegTr = 2000
 model_name = '' #same as main cmd --model XXX
 wework_location_only = True
 
+
+
 #=============================================================================================================================
 #main
 #=============================================================================================================================
@@ -98,13 +100,13 @@ def main():
     df_all_pair = pd.read_csv(pjoin(TR_DATA_ROOT,'train_val_test_location_company_82split'+args.apps),index_col=0)
     df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat'+args.apps),index_col=0)
     df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat'+args.apps),index_col=0)
-    clfile = ['PA', 'SF', 'SJ','LA','NY']
-    clfile = [ c + args.apps for c in clfile ]
-    cityname = ['Palo Alto','San Francisco','San Jose','Los Angeles', 'New York']
+
+    clfile = ['PA', 'SF', 'SJ', 'LA', 'NY']
+    cityname = ['Palo Alto', 'San Francisco', 'San Jose', 'Los Angeles', 'New York']
     cfile = ['dnb_pa.csv', 'dnb_sf.csv', 'dnb_sj.csv', 'dnb_Los_Angeles.csv', 'dnb_New_York.csv']
     lfile = 'location_scorecard_191113.csv'
 
-    # pred_save_name = ['PA_similarity', 'SF_similarity', 'SJ_similarity.csv','LA_similarity.csv','NY_similarity.csv']
+    clfile = [c + args.apps for c in clfile]
     pred_save_name = [ c.replace(args.apps,'') + '_similarity'+args.apps for c in clfile ]
 
     if args.ensemble:
@@ -232,13 +234,16 @@ def main():
 
         for ind_city in [3,4]:
             pdcl = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
-            pdcl = pdcl.groupby(['atlas_location_uuid', 'duns_number']).first().reset_index(drop=True)
+            # pdcl = pdcl.groupby(['atlas_location_uuid', 'duns_number']).first().reset_index(drop=True)
+            # pdcl = pdcl.groupby('atlas_location_uuid').first().reset_index()
+            pdc = pd.read_csv(pjoin(TR_DATA_ROOT, cfile[ind_city]))[['duns_number']]
+            pdc['atlas_location_uuid'] = 'a'
             all_loc_name = pdcl[['atlas_location_uuid']].groupby(['atlas_location_uuid'])[
                 ['atlas_location_uuid']].first().reset_index(drop=True)
             all_loc_name['key'] = 0
-            pdcl['key'] = 0
+            pdc['key'] = 0
 
-            testing_pair = pd.merge(pdcl, all_loc_name, on='key', how='left',
+            testing_pair = pd.merge(pdc, all_loc_name, on='key', how='left',
                                     suffixes=['_left', '_right']).reset_index(drop=True)
 
             testing_pair = testing_pair.rename(
@@ -360,8 +365,10 @@ def main():
         """
         for ind_city in [0,1,2,3,4]:
             pdcl = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
+            pdc = pd.read_csv(pjoin(TR_DATA_ROOT,cfile[ind_city]))[['duns_number']]
+            pdc['atlas_location_uuid'] = 'a'
             # in case of multi-mapping
-            pdcl = pdcl.groupby(['atlas_location_uuid', 'duns_number']).first().reset_index(drop=True)
+            # pdcl = pdcl.groupby('atlas_location_uuid').first().reset_index()
             all_loc_name = pdcl[['atlas_location_uuid']].groupby(['atlas_location_uuid'])[
                 ['atlas_location_uuid']].first().reset_index(drop=True)
 
@@ -371,9 +378,10 @@ def main():
                 all_loc_name = all_loc_name.merge(loc_ww,on='atlas_location_uuid',how='inner',suffixes=['','_right'])[['atlas_location_uuid']]
 
             all_loc_name['key'] = 0
-            pdcl['key'] = 0
+            pdc['key'] = 0
 
-            testing_pair = pd.merge(pdcl, all_loc_name, on='key', how='left',
+
+            testing_pair = pd.merge(pdc, all_loc_name, on='key', how='left',
                                     suffixes=['_left', '_right']).reset_index(drop=True)
 
             testing_pair = testing_pair.rename(
