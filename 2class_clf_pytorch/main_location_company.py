@@ -105,7 +105,7 @@ def main():
     lfile = 'location_scorecard_191113.csv'
 
     # pred_save_name = ['PA_similarity', 'SF_similarity', 'SJ_similarity.csv','LA_similarity.csv','NY_similarity.csv']
-    pred_save_name = [ c + '_similarity'+args.apps for c in clfile ]
+    pred_save_name = [ c.replace('.csv','') + '_similarity'+args.apps for c in clfile ]
 
     if args.ensemble:
         df_ensemble = []
