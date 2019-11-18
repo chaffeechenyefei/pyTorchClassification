@@ -397,6 +397,10 @@ class NaiveDeepWide(nn.Module):
             'deep_feat' : deep_feat
         }
 
+    def freeze(self):
+        for param in self.parameters():
+            param.requires_grad = False
+
 
 class NaiveDLCosineLosswKemb(nn.Module):
     """
