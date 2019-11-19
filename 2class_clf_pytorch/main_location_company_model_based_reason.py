@@ -34,9 +34,9 @@ from gunlib.company_location_score_lib import global_filter,sub_rec_similar_comp
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
 
 pjoin = os.path.join
-#not used @this version /home/ubuntu/location_recommender_system/
-TR_DATA_ROOT = '/Users/yefeichen/Database/location_recommender_system/'
-TT_DATA_ROOT = 'Users/yefeichen/Database/location_recommender_system/'
+#not used @this version /home/ubuntu/location_recommender_system/ /Users/yefeichen/Database/location_recommender_system
+TR_DATA_ROOT = '/home/ubuntu/location_recommender_system//'
+TT_DATA_ROOT = '/home/ubuntu/location_recommender_system/'
 
 OLD_N_CLASSES = 2
 N_CLASSES = 2#253#109
