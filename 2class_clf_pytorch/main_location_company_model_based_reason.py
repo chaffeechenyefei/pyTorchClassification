@@ -160,7 +160,7 @@ def main():
         Path(str(run_root) + '/params.json').write_text(
             json.dumps(vars(args), indent=4, sort_keys=True))
 
-        for ind_city in range(1):
+        for ind_city in range(5):
             print('Operating %s...'%pred_save_name[ind_city])
             testing_pair = pd.read_csv(pjoin(TR_DATA_ROOT, pred_save_name[ind_city]))[['atlas_location_uuid', 'duns_number']]
             testing_pair['label'] = 0
