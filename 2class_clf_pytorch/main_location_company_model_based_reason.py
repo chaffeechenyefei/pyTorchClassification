@@ -25,6 +25,7 @@ from utils import (write_event, load_model, ThreadingDataLoader as DataLoader, a
 from gunlib.company_location_score_lib import translocname2dict
 
 from models.utils import *
+from udf.basic import list2str
 from udf.basic import save_obj,load_obj,calc_topk_acc_cat_all,topk_recall_score_all
 import matplotlib.pyplot as plt
 from gunlib.company_location_score_lib import global_filter,sub_rec_similar_company,sub_rec_condition,merge_rec_reason_rowise,reason_json_format
@@ -35,7 +36,7 @@ from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_sco
 
 pjoin = os.path.join
 #not used @this version /home/ubuntu/location_recommender_system/ /Users/yefeichen/Database/location_recommender_system
-TR_DATA_ROOT = '/home/ubuntu/location_recommender_system//'
+TR_DATA_ROOT = '/home/ubuntu/location_recommender_system/'
 TT_DATA_ROOT = '/home/ubuntu/location_recommender_system/'
 
 OLD_N_CLASSES = 2
@@ -159,7 +160,8 @@ def main():
         Path(str(run_root) + '/params.json').write_text(
             json.dumps(vars(args), indent=4, sort_keys=True))
 
-        for ind_city in [0]:
+        for ind_city in range(1):
+            print('Operating %s...'%pred_save_name[ind_city])
             testing_pair = pd.read_csv(pjoin(TR_DATA_ROOT, pred_save_name[ind_city]))[['atlas_location_uuid', 'duns_number']]
             testing_pair['label'] = 0
             testing_pair = testing_pair[['duns_number', 'atlas_location_uuid','label']]
@@ -189,7 +191,7 @@ def merge_col_ind(x,col_name,feat_name,topk=3):
             if not (im_feat.startswith('primary') or im_feat.startswith('major_')):
                 merged_cols.append(feat_name[int(x[i])])
                 cnt +=1
-    return merged_cols
+    return list2str(merged_cols)
 
 def predict_with_reason(
         model: nn.Module, criterion, predict_loader, use_cuda, test_pair, feat_name, save_name: str, pre_name: str = ''):
