@@ -40,7 +40,7 @@ for imgname1 in imgList:
     if port1[1] in imgExt:
         img1 = cv2.imread(pjoin(imgroot, imgname1), 1)
         img1 = cv2.resize(img1, (512, 512))
-        img1 = cv2.cvtColor(img1,cv2.COLOR_BGR2RGB)
+        # img1 = cv2.cvtColor(img1,cv2.COLOR_BGR2RGB)
 
         feat1 = d2_feat.detect(img1)
         # try:

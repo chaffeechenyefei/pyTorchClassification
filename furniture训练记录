@@ -113,4 +113,4 @@ python3 main_location_company.py --model location_recommend_model_v6 --run_root 
 
 python3 linkCompanyAndLocation_v2_focus_on_location.py --run_root ~/location_recommender_system/ --geo_bit 7 --dist_thresh 500 --apps _191114.csv
 python3 get_csv_for_training_and_testing.py --run_root ~/location_recommender_system/ --app_date _191114 --ratio 0.8
-
+python3 get_sub_recommend_reason_after_similarity.py --run_root ~/location_recommender_system/ --ls_card location_scorecard_191113.csv --apps _191113.csv --sampled --ww
