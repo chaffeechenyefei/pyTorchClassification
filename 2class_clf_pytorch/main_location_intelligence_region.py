@@ -258,7 +258,7 @@ def train(args, model: nn.Module, criterion, *, params,
 
                 nP,nN = model_output_pos['outputs'].shape[0], model_output_neg['outputs'].shape[0]
                 target_pos = torch.ones((nP,1),dtype=torch.long)
-                target_neg = torch.ones((nN, 1), dtype=torch.long)
+                target_neg = torch.zeros((nN, 1), dtype=torch.long)
                 targets = torch.cat( [ target_pos, target_neg ], dim = 0)
 
                 if use_cuda:
@@ -334,7 +334,7 @@ def validation(
 
             nP, nN = model_output_pos['outputs'].shape[0], model_output_neg['outputs'].shape[0]
             target_pos = torch.ones((nP, 1), dtype=torch.long)
-            target_neg = torch.ones((nN, 1), dtype=torch.long)
+            target_neg = torch.zeros((nN, 1), dtype=torch.long)
             targets = torch.cat([target_pos, target_neg], dim=0)
 
             if use_cuda:
