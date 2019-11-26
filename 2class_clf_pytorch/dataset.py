@@ -721,11 +721,12 @@ class TrainDatasetLocationRSRB(Dataset):
             cldat = self._df_pair[(self._df_pair['fold'] == 0) & (self._df_pair['city'] == ind_city)]
 
             fn = lambda obj: obj.loc[np.random.choice(obj.index, 1, True), :]
-            tbA = cldat.groupby('atlas_location_uuid').apply(fn).reset_index(drop=True)[
+            cldatGrp = cldat.groupby('atlas_location_uuid')
+            tbA = cldatGrp.apply(fn).reset_index(drop=True)[
                 ['duns_number', 'atlas_location_uuid']]
             # print('1.len of tbA %d:' % len(tbA))
             fn = lambda obj: obj.loc[np.random.choice(obj.index, self._maxK, True), :]
-            tbB = cldat.groupby('atlas_location_uuid').apply(fn).reset_index(drop=True)[
+            tbB = cldatGrp.apply(fn).reset_index(drop=True)[
                 ['duns_number', 'atlas_location_uuid']]
             # print('1.len of tbB %d' % len(tbB))
 
@@ -735,12 +736,14 @@ class TrainDatasetLocationRSRB(Dataset):
             tbB = tbB[tbB['mk'].isnull()]
             # print('2.len of tbB not included in tbA %d' % len(tbB))
             # we need to full fill the data
-            tbB = tbB.groupby('atlas_location_uuid').apply(fn).reset_index(drop=True)[
+            tbBGrp = tbB.groupby('atlas_location_uuid')
+            tbB = tbBGrp.apply(fn).reset_index(drop=True)[
                 ['duns_number', 'atlas_location_uuid']]
             tbB['mk'] = 'B'
             # print('3.len of tbB full filled again %d' % len(tbB))
             # in case tbB cut some locations from tbA, lets shrink tbA
-            tblocB = tbB.groupby('atlas_location_uuid').first().reset_index()
+            tblocB = tbBGrp.first().reset_index()
+            tblocB['mk'] = 'B'
             # print('4.len of locations in tbB %d' % len(tblocB))
             tbA = tbA.merge(tblocB, on='atlas_location_uuid', how='left', suffixes=['', '_right'])
             tbA = tbA[tbA['mk_right'].notnull()][['duns_number', 'atlas_location_uuid', 'mk']].reset_index(drop=True)

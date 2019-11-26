@@ -50,6 +50,8 @@ class setLinearLayerConv1d(nn.Module):
             return feat_out.squeeze()
         else:#max pooling
             feat_out = torch.zeros(B,self._fout,K)#[B,fout,K]
+            if use_cuda:
+                feat_out = feat_out.cuda()
             for k in range(K):
                 feat_out[:,:,k] = 1.0*self.net(feat_set[:, k, :].unsqueeze(1)).squeeze()  # [B,1,fin]->[B,fout,1]
             pool = F.max_pool1d
