@@ -15,17 +15,18 @@ from aug import *
 from transforms import iaaTransform
 import math
 
-
 # image_size = 256
 
 iaa_transformer = iaaTransform()
 iaa_transformer.getSeq()
 
-#=======================================================================================================================
+
+# =======================================================================================================================
 # Standard Data load with one image each time and do not consider triplet loss(P/N sample pairs)
-#=======================================================================================================================
+# =======================================================================================================================
 class TrainDataset(Dataset):
-    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize = 256 , class_num = -1):
+    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256,
+                 class_num=-1):
         super().__init__()
         self._root = root
         self._df = df
@@ -41,7 +42,7 @@ class TrainDataset(Dataset):
         _idx = idx
         item = self._df.iloc[_idx]
         # image = load_transform_image(item, self._root, imgsize = self._imgsize,debug=self._debug, name=self._name)
-        image = load_transform_image_iaa(item, self._root, imgsize = self._imgsize,debug=self._debug, name=self._name)
+        image = load_transform_image_iaa(item, self._root, imgsize=self._imgsize, debug=self._debug, name=self._name)
         # target = torch.zeros(N_CLASSES)
         lb = item.attribute_ids
         # print(lb)
@@ -51,16 +52,18 @@ class TrainDataset(Dataset):
         # clsval = int(lb[5])
         # target = torch.from_numpy(np.array(item.attribute_ids))
         clsval = int(lb)
-        assert(clsval>=0 and clsval < self._class_num)
+        assert (clsval >= 0 and clsval < self._class_num)
         target = torch.from_numpy(np.array(clsval))
         return image, target
 
-#=======================================================================================================================
+
+# =======================================================================================================================
 # Vanilla Data loader for Triplet loss, data loading is not fast because each time 8 images will be loaded and doing aug
 # separately(not in batch version)
-#=======================================================================================================================
+# =======================================================================================================================
 class TrainDatasetTriplet(Dataset):
-    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256, class_num = -1):
+    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256,
+                 class_num=-1):
         super().__init__()
         self._root = root
         self._df = df
@@ -69,8 +72,8 @@ class TrainDatasetTriplet(Dataset):
         self._imgsize = imgsize
         self._class_num = class_num
 
-    def __len__(self):#how much times will each epoch sample
-        return min(max(len(self._df),20000),40000)
+    def __len__(self):  # how much times will each epoch sample
+        return min(max(len(self._df), 20000), 40000)
         # return self._class_num*125
 
     @staticmethod
@@ -83,34 +86,34 @@ class TrainDatasetTriplet(Dataset):
         labelA = int(idx % self._class_num)
         dfA = self._df[self._df['attribute_ids'] == labelA]
         while dfA.empty:
-            labelA = random.randint(0,self._class_num-1)
+            labelA = random.randint(0, self._class_num - 1)
             dfA = self._df[self._df['attribute_ids'] == labelA]
 
         len_dfA = len(dfA)
-        assert(len_dfA!=0)
-        pair_idxA = [random.randint(0, len_dfA - 1) for _ in range(4)]#有重采样
+        assert (len_dfA != 0)
+        pair_idxA = [random.randint(0, len_dfA - 1) for _ in range(4)]  # 有重采样
         images = []
         targets = []
 
-        #pos
+        # pos
         for idxA in pair_idxA:
             item = dfA.iloc[idxA]
             image = load_transform_image_iaa(item, self._root, imgsize=self._imgsize, debug=self._debug,
-                                         name=self._name)
+                                             name=self._name)
             lb = int(item.attribute_ids)
             assert (lb < self._class_num)
             images.append(image)
             targets.append(lb)
 
-        #neg
+        # neg
         dfB = self._df[self._df['attribute_ids'] != labelA]
         len_dfB = len(dfB)
-        pair_idxB = [random.randint(0, len_dfB - 1) for _ in range(4)]#有重采样
+        pair_idxB = [random.randint(0, len_dfB - 1) for _ in range(4)]  # 有重采样
 
         for idxB in pair_idxB:
             item = dfB.iloc[idxB]
             image = load_transform_image_iaa(item, self._root, imgsize=self._imgsize, debug=self._debug,
-                                         name=self._name)
+                                             name=self._name)
             images.append(image)
             lb = int(item.attribute_ids)
             targets.append(lb)
@@ -141,11 +144,13 @@ def collate_TrainDatasetTriplet(batch):
     labels = torch.from_numpy(np.array(labels))
     return images, labels
 
-#=======================================================================================================================
+
+# =======================================================================================================================
 # Standard Triplet loss data loader and data aug is done with batch
-#=======================================================================================================================
+# =======================================================================================================================
 class TrainDatasetTripletBatchAug(Dataset):
-    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256, class_num = -1):
+    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256,
+                 class_num=-1):
         super().__init__()
         self._root = root
         self._df = df
@@ -154,8 +159,8 @@ class TrainDatasetTripletBatchAug(Dataset):
         self._imgsize = imgsize
         self._class_num = class_num
 
-    def __len__(self):#how much times will each epoch sample
-        return min(max(len(self._df),40000),20000)
+    def __len__(self):  # how much times will each epoch sample
+        return min(max(len(self._df), 40000), 20000)
         # return self._class_num*125
 
     @staticmethod
@@ -169,46 +174,45 @@ class TrainDatasetTripletBatchAug(Dataset):
 
         dfA = self._df[self._df['attribute_ids'] == labelA]
         while dfA.empty:
-            labelA = random.randint(0,self._class_num-1)
+            labelA = random.randint(0, self._class_num - 1)
             dfA = self._df[self._df['attribute_ids'] == labelA]
 
         len_dfA = len(dfA)
-        assert(len_dfA!=0)
-        pair_idxA = [random.randint(0, len_dfA - 1) for _ in range(4)]#有重采样
+        assert (len_dfA != 0)
+        pair_idxA = [random.randint(0, len_dfA - 1) for _ in range(4)]  # 有重采样
 
         images = []
         targets = []
 
-        #pos
+        # pos
         for idxA in pair_idxA:
             item = dfA.iloc[idxA]
             image = load_image_uint8(item, self._root, imgsize=self._imgsize, debug=self._debug,
-                                         name=self._name)
+                                     name=self._name)
             lb = int(item.attribute_ids)
             assert (lb < self._class_num)
             images.append(image)
             targets.append(lb)
 
-        #neg
+        # neg
         dfB = self._df[self._df['attribute_ids'] != labelA]
         len_dfB = len(dfB)
-        pair_idxB = [random.randint(0, len_dfB - 1) for _ in range(4)]#有重采样
+        pair_idxB = [random.randint(0, len_dfB - 1) for _ in range(4)]  # 有重采样
 
         for idxB in pair_idxB:
             item = dfB.iloc[idxB]
             image = load_image_uint8(item, self._root, imgsize=self._imgsize, debug=self._debug,
-                                         name=self._name)
+                                     name=self._name)
             images.append(image)
             lb = int(item.attribute_ids)
             targets.append(lb)
 
+        # IAA Batch Operations
+        images = np.stack(images, 0)
 
-        #IAA Batch Operations
-        images = np.stack(images,0)
-
-        #images = [B,H,W,C]
+        # images = [B,H,W,C]
         images = iaa_transformer.act_batch(images)
-        images = np.transpose(images, (0, 3, 1, 2)) #[B,H,W,C] -> [B,C,H,W]
+        images = np.transpose(images, (0, 3, 1, 2))  # [B,H,W,C] -> [B,C,H,W]
         images = images.astype(np.float32)
         images = images / 255.0
 
@@ -229,7 +233,7 @@ def collate_TrainDatasetTripletBatchAug(batch):
         if b[0] is None:
             continue
         else:
-            images.extend(b[0]) #extend will transfer torch.[B,C,H,W]->list(torch.[C,H,W])
+            images.extend(b[0])  # extend will transfer torch.[B,C,H,W]->list(torch.[C,H,W])
             labels.extend(b[1])
 
     images = torch.stack(images, 0)  # images : list of [C,H,W] -> [Len_of_list, C, H,W]
@@ -237,11 +241,13 @@ def collate_TrainDatasetTripletBatchAug(batch):
     assert (images.shape[0] == labels.shape[0])
     return images, labels
 
-#=======================================================================================================================
+
+# =======================================================================================================================
 # Specific version of triplet loss data loader and data aug is done with batch. Also, image is added with background.
-#=======================================================================================================================
+# =======================================================================================================================
 class TrainDatasetTripletBatchAug_BG(Dataset):
-    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256, class_num = -1):
+    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256,
+                 class_num=-1):
         super().__init__()
         self._root = root
         self._df = df
@@ -250,8 +256,8 @@ class TrainDatasetTripletBatchAug_BG(Dataset):
         self._imgsize = imgsize
         self._class_num = class_num
 
-    def __len__(self):#how much times will each epoch sample
-        return min(max(len(self._df),20000),15000)
+    def __len__(self):  # how much times will each epoch sample
+        return min(max(len(self._df), 20000), 15000)
         # return self._class_num*125
 
     @staticmethod
@@ -265,36 +271,35 @@ class TrainDatasetTripletBatchAug_BG(Dataset):
 
         dfA = self._df[self._df['attribute_ids'] == labelA]
         while dfA.empty:
-            labelA = random.randint(0,self._class_num-1)
+            labelA = random.randint(0, self._class_num - 1)
             dfA = self._df[self._df['attribute_ids'] == labelA]
 
         len_dfA = len(dfA)
-        assert(len_dfA!=0)
-        pair_idxA = [random.randint(0, len_dfA - 1) for _ in range(2)]#有重采样
+        assert (len_dfA != 0)
+        pair_idxA = [random.randint(0, len_dfA - 1) for _ in range(2)]  # 有重采样
 
         images = []
         targets = []
 
-        #pos
+        # pos
         for idxA in pair_idxA:
             item = dfA.iloc[idxA]
             image = load_image(item, self._root)
-            #real_ comes from matterport, val_ comes from FFE without rles, they are added into training @ this version
+            # real_ comes from matterport, val_ comes from FFE without rles, they are added into training @ this version
             if item.id.startswith('real') or item.id.startswith('val'):
                 bg_Flag = False
             else:
                 bg_Flag = True
-            image = rand_bg_resize_crop(image,item.id,imgsize=(self._imgsize,self._imgsize),addBg=bg_Flag)
+            image = rand_bg_resize_crop(image, item.id, imgsize=(self._imgsize, self._imgsize), addBg=bg_Flag)
             lb = int(item.attribute_ids)
             assert (lb < self._class_num)
             images.append(image)
             targets.append(lb)
 
-
-        #neg
+        # neg
         dfB = self._df[self._df['attribute_ids'] != labelA]
         len_dfB = len(dfB)
-        pair_idxB = [random.randint(0, len_dfB - 1) for _ in range(2)]#有重采样
+        pair_idxB = [random.randint(0, len_dfB - 1) for _ in range(2)]  # 有重采样
 
         for idxB in pair_idxB:
             item = dfB.iloc[idxB]
@@ -303,7 +308,7 @@ class TrainDatasetTripletBatchAug_BG(Dataset):
                 bg_Flag = False
             else:
                 bg_Flag = True
-            image = rand_bg_resize_crop(image, item.id, imgsize=(self._imgsize,self._imgsize),addBg=bg_Flag)
+            image = rand_bg_resize_crop(image, item.id, imgsize=(self._imgsize, self._imgsize), addBg=bg_Flag)
             images.append(image)
             lb = int(item.attribute_ids)
             targets.append(lb)
@@ -312,9 +317,9 @@ class TrainDatasetTripletBatchAug_BG(Dataset):
         # print(images[0].shape)
         images = np.stack(images, 0)
 
-        #images = [B,H,W,C]
+        # images = [B,H,W,C]
         images = iaa_transformer.act_batch(images)
-        images = np.transpose(images, (0, 3, 1, 2)) #[B,H,W,C] -> [B,C,H,W]
+        images = np.transpose(images, (0, 3, 1, 2))  # [B,H,W,C] -> [B,C,H,W]
         images = images.astype(np.float32)
         images = images / 255.0
 
@@ -343,12 +348,14 @@ def collate_TrainDatasetTripletBatchAug_BG(batch):
     assert (images.shape[0] == labels.shape[0])
     return images, labels
 
-#=======================================================================================================================
+
+# =======================================================================================================================
 # Specific version of data loader and data aug is done with batch. Also, image is added with background. Label is bbox
 # [cx,cy,w,h] -> Real(0,1)
-#=======================================================================================================================
+# =======================================================================================================================
 class TrainDatasetBatchAug_BG_4_BBox(Dataset):
-    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256, class_num = -1):
+    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256,
+                 class_num=-1):
         super().__init__()
         self._root = root
         self._df = df
@@ -357,8 +364,8 @@ class TrainDatasetBatchAug_BG_4_BBox(Dataset):
         self._imgsize = imgsize
         self._class_num = class_num
 
-    def __len__(self):#how much times will each epoch sample
-        return min(max(len(self._df),20000),15000)
+    def __len__(self):  # how much times will each epoch sample
+        return min(max(len(self._df), 20000), 15000)
         # return self._class_num*125
 
     @staticmethod
@@ -373,19 +380,19 @@ class TrainDatasetBatchAug_BG_4_BBox(Dataset):
 
         idxA = int(idx % len(self._df))
         item = self._df.iloc[idxA]
-        image = load_image(item, self._root) #[H,W,C]
-        image,bbox = rand_bg_resize_crop_withbbox(image, item.id, imgsize=(self._imgsize, self._imgsize))
+        image = load_image(item, self._root)  # [H,W,C]
+        image, bbox = rand_bg_resize_crop_withbbox(image, item.id, imgsize=(self._imgsize, self._imgsize))
 
         # save_img_debug(image, [0.5,0.5,1,1])
 
-        bbox = np.array(bbox).reshape(1,4)
+        bbox = np.array(bbox).reshape(1, 4)
 
-        return image,bbox
-
-
+        return image, bbox
 
 
-        #images = [H,W,C]
+
+
+        # images = [H,W,C]
 
         # image = iaa_transformer.act(image)
         # image = np.transpose(image, (2,0,1)) #[H,W,C] -> [C,H,W]
@@ -393,6 +400,7 @@ class TrainDatasetBatchAug_BG_4_BBox(Dataset):
         # image = image / 255.0
 
         # return torch.FloatTensor(image),torch.FloatTensor(bbox).reshape(1,4)
+
 
 def collate_TrainDatasetBatchAug_BG_4_BBox(batch):
     """
@@ -411,50 +419,52 @@ def collate_TrainDatasetBatchAug_BG_4_BBox(batch):
             images.append(b[0])
             labels.append(b[1])
 
-    images = np.stack(images,0) #[H,W,C] -> [B,H,W,C]
+    images = np.stack(images, 0)  # [H,W,C] -> [B,H,W,C]
 
     images = iaa_transformer.act_batch(images)
-    images = np.transpose(images, (0 ,3, 1, 2))  # [B,H,W,C] -> [B,C,H,W]
+    images = np.transpose(images, (0, 3, 1, 2))  # [B,H,W,C] -> [B,C,H,W]
     images = images.astype(np.float32)
     images = images / 255.0
 
     images = torch.FloatTensor(images)
 
-    labels = np.concatenate(labels,axis=0)
+    labels = np.concatenate(labels, axis=0)
     labels = torch.from_numpy(labels)
     labels = labels.float()
     assert (images.shape[0] == labels.shape[0])
     return images, labels
 
-#=======================================================================================================================
+
+# =======================================================================================================================
 # Specific version of data loader for loading data from 2 kind of database. One can only be used for creating N pairs.
-#=======================================================================================================================
+# =======================================================================================================================
 # #item \
 # # - attribute_ids - id - folds - data: a,b
 class TrainDatasetSelected(Dataset):
-    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize = 256 , class_num = -1):
+    def __init__(self, root: Path, df: pd.DataFrame, debug: bool = True, name: str = 'train', imgsize=256,
+                 class_num=-1):
         super().__init__()
         self._root = root
         self._df = df
         self._debug = debug
         self._name = name
         self._imgsize = imgsize
-        self._dfA = df[df['data']=='a']
-        self._dfB = df[df['data']=='b']
+        self._dfA = df[df['data'] == 'a']
+        self._dfB = df[df['data'] == 'b']
         self._class_num = class_num
 
     def __len__(self):
-        return len(self._df)//4
+        return len(self._df) // 4
 
     def __getitem__(self, idx: int):
-        #choose label from data a
-        #choose any tow sample from data b bcz 1 image per class
+        # choose label from data a
+        # choose any tow sample from data b bcz 1 image per class
         labelA = int(idx % self._class_num)
-        #https://stackoverflow.com/questions/21415661/logical-operators-for-boolean-indexing-in-pandas
+        # https://stackoverflow.com/questions/21415661/logical-operators-for-boolean-indexing-in-pandas
         # dfA = self._df[(self._df['data'] == 'a')&(self._df['attribute_ids'] == str(labelA))]
-        dfA = self._dfA[self._dfA['attribute_ids'] == labelA+1]
+        dfA = self._dfA[self._dfA['attribute_ids'] == labelA + 1]
         len_dfA = len(dfA)
-        pair_idxA = [random.randint(0, len_dfA-1) for _ in range(2)]
+        pair_idxA = [random.randint(0, len_dfA - 1) for _ in range(2)]
 
         imagesA = []
         imagesB = []
@@ -465,13 +475,13 @@ class TrainDatasetSelected(Dataset):
             item = dfA.iloc[idxA]
             image = load_transform_image(item, self._root, imgsize=self._imgsize, debug=self._debug, name=self._name)
             lb = int(item.attribute_ids) - 1
-            assert(lb < self._class_num)
+            assert (lb < self._class_num)
             imagesA.append(image)
             single_targetsA.append(lb)
 
         dfB = self._dfB
         len_dfB = len(dfB)
-        pair_idxB = [random.randint(0, len_dfB-1) for _ in range(2)]
+        pair_idxB = [random.randint(0, len_dfB - 1) for _ in range(2)]
 
         for idxB in pair_idxB:
             item = dfB.iloc[idxB]
@@ -480,7 +490,7 @@ class TrainDatasetSelected(Dataset):
             lb = int(item.attribute_ids) - 1
             single_targetsB.append(lb)
 
-        return (imagesA,imagesB), (single_targetsA,single_targetsB)
+        return (imagesA, imagesB), (single_targetsA, single_targetsB)
 
 
 def collate_TrainDatasetSelected(batch):
@@ -508,20 +518,21 @@ def collate_TrainDatasetSelected(batch):
     imagesA.extend(imagesB)
     labelsA.extend(labelsB)
 
-    imagesA = torch.stack(imagesA,0) #images : list of [C,H,W] -> [Len_of_list, C, H,W]
+    imagesA = torch.stack(imagesA, 0)  # images : list of [C,H,W] -> [Len_of_list, C, H,W]
     labelsA = torch.from_numpy(np.array(labelsA))
-    return imagesA,labelsA
+    return imagesA, labelsA
 
-#=======================================================================================================================
+
+# =======================================================================================================================
 # data loader function for company location score
-#=======================================================================================================================
+# =======================================================================================================================
 class TrainDatasetLocationRS(Dataset):
     def __init__(self, df_comp_feat: pd.DataFrame,
                  df_loc_feat: pd.DataFrame,
                  df_pair: pd.DataFrame,
-                 df_ensemble_score, flag_ensemble:bool,
-                 emb_dict:dict,
-                 name: str = 'train' , posN = 100, negN=200,testStep=500000):
+                 df_ensemble_score, flag_ensemble: bool,
+                 emb_dict: dict,
+                 name: str = 'train', posN=100, negN=200, testStep=500000):
         super().__init__()
         self._df_comp_feat = df_comp_feat.fillna(0)
         self._df_loc_feat = df_loc_feat.fillna(0)
@@ -538,18 +549,18 @@ class TrainDatasetLocationRS(Dataset):
         if self._name == 'train':
             return 1000
         else:
-            return math.ceil(len(self._df_pair)/self._step)#len of pair
+            return math.ceil(len(self._df_pair) / self._step)  # len of pair
 
     def tbatch(self):
         return self._posN + self._negN
 
     def __getitem__(self, idx: int):
         if self._name == 'train':
-            #sample a part of data from training pair as positive seed
+            # sample a part of data from training pair as positive seed
             dat1 = self._df_pair.sample(n=self._posN).reset_index(drop=True)
             dat2 = dat1.sample(frac=1).reset_index(drop=True)
 
-            #generate negative sample from positive seed
+            # generate negative sample from positive seed
             twin_dat = pd.merge(dat1, dat2, on='city', how='left', suffixes=['_left', '_right'])
             # twin_dat = twin_dat[twin_dat['atlas_location_uuid_left'] != twin_dat['atlas_location_uuid_right']]
             pot_neg_datA = twin_dat[
@@ -575,15 +586,16 @@ class TrainDatasetLocationRS(Dataset):
             neg_dat['label'] = neg_dat['label'].fillna(0)
             neg_dat = neg_dat[neg_dat['label_right'] != 1]
 
-            neg_dat = neg_dat[['duns_number', 'atlas_location_uuid','label']].sample(n=min(self._negN, len(neg_dat))).reset_index(drop=True)
+            neg_dat = neg_dat[['duns_number', 'atlas_location_uuid', 'label']].sample(
+                n=min(self._negN, len(neg_dat))).reset_index(drop=True)
 
             pos_dat = dat1[col_list]
             res_dat = pd.concat([pos_dat, neg_dat], axis=0)
             res_dat = res_dat.sample(frac=1).reset_index(drop=True)
             Label = res_dat[['label']].to_numpy()
         else:
-            inds = idx*self._step
-            inde = min((idx+1)*self._step,len(self._df_pair)) - 1#loc[a,b] = [a,b] close set!!
+            inds = idx * self._step
+            inde = min((idx + 1) * self._step, len(self._df_pair)) - 1  # loc[a,b] = [a,b] close set!!
             # res_dat = self._df_pair.loc[inds:inde,['duns_number','atlas_location_uuid','groundtruth']]
             # Label = (res_dat['atlas_location_uuid'] == res_dat['groundtruth']).to_numpy() + 0
             res_dat = self._df_pair.loc[inds:inde, ['duns_number', 'atlas_location_uuid', 'label']]
@@ -602,35 +614,36 @@ class TrainDatasetLocationRS(Dataset):
         FeatLoc = F_res_dat[list_col].to_numpy()
 
         if self._flag_ensemble:
-            F_res_dat = pd.merge(res_dat, self._df_ensemble_score, on=['atlas_location_uuid','duns_number'],how='left')
+            F_res_dat = pd.merge(res_dat, self._df_ensemble_score, on=['atlas_location_uuid', 'duns_number'],
+                                 how='left')
             list_col = list(self._df_ensemble_score.columns)
             list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
             # print(list_col)
             FeatEnsembleScore = F_res_dat[list_col].to_numpy()
         else:
-            FeatEnsembleScore = np.ones((len(F_res_dat),1),dtype=np.float32)
+            FeatEnsembleScore = np.ones((len(F_res_dat), 1), dtype=np.float32)
 
-        #trans id(str) 2 Long
+        # trans id(str) 2 Long
         loc_name_str = res_dat['atlas_location_uuid'].values.tolist()
-        loc_name_int = [ self._emb_dict[n] for n in loc_name_str ]
+        loc_name_int = [self._emb_dict[n] for n in loc_name_str]
 
         # [B,Len_feat],[B,1]
-        assert(len(Label)==len(FeatComp) and len(Label)==len(FeatLoc))
+        assert (len(Label) == len(FeatComp) and len(Label) == len(FeatLoc))
         # print(Label.sum(), FeatLoc.sum(),FeatComp.sum())
 
         featComp = torch.FloatTensor(FeatComp)
         featLoc = torch.FloatTensor(FeatLoc)
         featEnsembleScore = torch.FloatTensor(FeatEnsembleScore)
-        featId = torch.LongTensor(loc_name_int).reshape(-1,1)
-        target = torch.LongTensor(Label).reshape(-1,1)
+        featId = torch.LongTensor(loc_name_int).reshape(-1, 1)
+        target = torch.LongTensor(Label).reshape(-1, 1)
 
-        return { "feat_comp": featComp,
-                 "feat_loc": featLoc,
-                 "target": target,
-                 "feat_id":featId,
-                 "feat_ensemble_score":featEnsembleScore,
-                 "feat_comp_dim":FeatComp.shape,
-                 "feat_loc_dim":FeatLoc.shape}
+        return {"feat_comp": featComp,
+                "feat_loc": featLoc,
+                "target": target,
+                "feat_id": featId,
+                "feat_ensemble_score": featEnsembleScore,
+                "feat_comp_dim": FeatComp.shape,
+                "feat_loc_dim": FeatLoc.shape}
 
 
 def collate_TrainDatasetLocationRS(batch):
@@ -653,16 +666,16 @@ def collate_TrainDatasetLocationRS(batch):
         labels.append(b['target'])
 
     feat_comp = torch.cat(feat_comp, 0)
-    feat_loc = torch.cat(feat_loc,0)
-    feat_id = torch.cat(feat_id,0)
-    feat_ensemble_score = torch.cat(feat_ensemble_score,0)
-    labels = torch.cat(labels,0)
+    feat_loc = torch.cat(feat_loc, 0)
+    feat_id = torch.cat(feat_id, 0)
+    feat_ensemble_score = torch.cat(feat_ensemble_score, 0)
+    labels = torch.cat(labels, 0)
     # print(feat_comp.shape,feat_loc.shape,labels.shape)
 
     assert (feat_loc.shape[0] == labels.shape[0])
     assert (feat_comp.shape[0] == labels.shape[0])
     assert (feat_id.shape[0] == labels.shape[0])
-    assert(feat_ensemble_score.shape[0]==labels.shape[0])
+    assert (feat_ensemble_score.shape[0] == labels.shape[0])
     return {
         "feat_comp": feat_comp,
         "feat_loc": feat_loc,
@@ -671,8 +684,183 @@ def collate_TrainDatasetLocationRS(batch):
         "target": labels
     }
 
+
+# =======================================================================================================================
+# data loader function for company location region modelling
+# RSRB: Recommendation System Region Based
+# =======================================================================================================================
+class TrainDatasetLocationRSRB(Dataset):
+    def __init__(self, df_comp_feat: pd.DataFrame,
+                 # df_loc_feat: pd.DataFrame,
+                 df_pair: pd.DataFrame,
+                 citynum=5,
+                 name: str = 'train', trainStep=10000, testStep=500000):
+        super().__init__()
+        self._df_comp_feat = df_comp_feat.fillna(0)
+        # self._df_loc_feat = df_loc_feat.fillna(0)
+        self._df_pair = df_pair.reset_index()
+        self._name = name
+        self._step = testStep
+        self._citynum = citynum
+        self._maxK = 20
+        self._traintimes = trainStep
+
+    def __len__(self):
+        if self._name == 'train':
+            return self._traintimes
+        else:
+            return math.ceil(len(self._df_pair) / self._step)  # len of pair
+
+    def tbatch(self):
+        return 0
+
+    def __getitem__(self, idx: int):
+        if self._name == 'train':
+            #pick a city randomly
+            ind_city = math.floor(random.random() * self._citynum)
+            cldat = self._df_pair[(self._df_pair['fold'] == 0) & (self._df_pair['city'] == ind_city)]
+
+            fn = lambda obj: obj.loc[np.random.choice(obj.index, 1, True), :]
+            tbA = cldat.groupby('atlas_location_uuid').apply(fn).reset_index(drop=True)[
+                ['duns_number', 'atlas_location_uuid']]
+            # print('1.len of tbA %d:' % len(tbA))
+            fn = lambda obj: obj.loc[np.random.choice(obj.index, self._maxK, True), :]
+            tbB = cldat.groupby('atlas_location_uuid').apply(fn).reset_index(drop=True)[
+                ['duns_number', 'atlas_location_uuid']]
+            # print('1.len of tbB %d' % len(tbB))
+
+            ###======================Pos=============================###
+            tbA['mk'] = 'A'
+            tbB = tbB.merge(tbA, on=['duns_number', 'atlas_location_uuid'], how='left', suffixes=['', '_right'])
+            tbB = tbB[tbB['mk'].isnull()]
+            # print('2.len of tbB not included in tbA %d' % len(tbB))
+            # we need to full fill the data
+            tbB = tbB.groupby('atlas_location_uuid').apply(fn).reset_index(drop=True)[
+                ['duns_number', 'atlas_location_uuid']]
+            tbB['mk'] = 'B'
+            # print('3.len of tbB full filled again %d' % len(tbB))
+            # in case tbB cut some locations from tbA, lets shrink tbA
+            tblocB = tbB.groupby('atlas_location_uuid').first().reset_index()
+            # print('4.len of locations in tbB %d' % len(tblocB))
+            tbA = tbA.merge(tblocB, on='atlas_location_uuid', how='left', suffixes=['', '_right'])
+            tbA = tbA[tbA['mk_right'].notnull()][['duns_number', 'atlas_location_uuid', 'mk']].reset_index(drop=True)
+            # print('4.len of tbA with common locations of tbB %d' % len(tbA))
+
+            ###======================Neg=============================###
+            tbAA = pd.concat([tbA, tbA.sample(frac=1).reset_index() \
+                             .rename(
+                columns={'duns_number': 'duns_number_n', 'atlas_location_uuid': 'atlas_location_uuid_n', 'mk': 'mk_n'})]
+                             , axis=1)
+            # print('5.len of negpair %d' % len(tbAA))
+            tbAA = tbAA.merge(cldat, \
+                              left_on=['duns_number_n', 'atlas_location_uuid'],
+                              right_on=['duns_number', 'atlas_location_uuid'], \
+                              how='left', suffixes=['', '_right'])
+
+            tbC = tbAA[tbAA['duns_number_right'].isnull()][['duns_number_n', 'atlas_location_uuid']] \
+                .rename(columns={'duns_number_n': 'duns_number'})
+            # print('6.len of neg data %d' % len(tbC))
+
+            # in case tbC cut some locations from tbA and tbB
+            tbC['mk'] = 'C'
+            tblocC = tbC.groupby('atlas_location_uuid').first().reset_index()
+            # print('6.locations in neg data %d' % len(tblocC))
+            tbA = tbA.merge(tblocC, on='atlas_location_uuid', how='left', suffixes=['', '_right'])
+            tbA = tbA[tbA['mk_right'].notnull()][['duns_number', 'atlas_location_uuid', 'mk']].reset_index(drop=True)
+            # print('final tbA len %d' % len(tbA))
+
+            tbB = tbB.merge(tblocC, on='atlas_location_uuid', how='left', suffixes=['', '_right'])
+            tbB = tbB[tbB['mk_right'].notnull()][['duns_number', 'atlas_location_uuid', 'mk']].reset_index(drop=True)
+            # print('final tbB len %d' % len(tbB))
+
+            tbA = tbA.sort_values(by='atlas_location_uuid')
+            tbB = tbB.sort_values(by='atlas_location_uuid')
+            tbC = tbC.sort_values(by='atlas_location_uuid')
+
+            assert (len(tbA) == len(tbC) and len(tbB) == len(tbA) * self._maxK)
+
+            list_col = list(self._df_comp_feat.columns)
+            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
+
+            featA = tbA.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
+            featB = tbB.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
+            featC = tbC.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
+
+        else:
+            dataLen = len(self._df_pair[self._df_pair['mk'] == 'A'])
+            inds = idx * self._step
+            inde = min((idx + 1) * self._step, dataLen) - 1  # loc[a,b] = [a,b] close set!!
+            # res_dat = self._df_pair.loc[inds:inde, ['duns_number', 'atlas_location_uuid','city','mk']]
+
+            list_col = list(self._df_comp_feat.columns)
+            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
+
+            datA = self._df_pair[self._df_pair['mk'] == 'A'].sort_values(
+                by=['city', 'atlas_location_uuid']).reset_index(drop=True)
+            datB = self._df_pair[self._df_pair['mk'] == 'B'].sort_values(
+                by=['city', 'atlas_location_uuid']).reset_index(drop=True)
+            datC = self._df_pair[self._df_pair['mk'] == 'C'].sort_values(
+                by=['city', 'atlas_location_uuid']).reset_index(drop=True)
+
+            datA = datA.loc[inds:inde, ['duns_number', 'atlas_location_uuid','city','mk']]
+            datB = datB.loc[inds*self._maxK:inde*self._maxK, ['duns_number', 'atlas_location_uuid','city','mk']]
+            datC = datC.loc[inds:inde, ['duns_number', 'atlas_location_uuid', 'city', 'mk']]
+
+            featA = datA.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
+            featB = datB.merge(self._df_comp_feat, on='duns_number', how='left', suffixes=['', '_right'])[list_col]
+            featC = datC.merge(self._df_comp_feat, on='duns_number', how='left', suffixes=['', '_right'])[list_col]
+
+        # all branch need such operation...
+        featA, featB, featC = featA.to_numpy(), featB.to_numpy(), featC.to_numpy()
+
+        featCompPos = torch.FloatTensor(featA)#B,D
+        featRegion = torch.FloatTensor(featB)
+        N, featdim = featRegion.shape
+
+        featRegion = featRegion.view(-1, self._maxK, featdim)#B,K,D
+
+        featCompNeg = torch.FloatTensor(featC)#B,D
+
+        return {
+            "feat_comp_pos": featCompPos,
+            "feat_comp_neg": featCompNeg,
+            "feat_comp_region": featRegion,
+        }
+
+
+def collate_TrainDatasetLocationRSRB(batch):
+    """
+    special collate_fn function for UDF class TrainDatasetTriplet
+    :param batch: 
+    :return: 
+    """
+    feat_comp_pos = []
+    feat_comp_neg = []
+    feat_comp_region = []
+
+    for b in batch:
+        feat_comp_pos.append(b['feat_comp_pos'])
+        feat_comp_neg.append(b['feat_comp_neg'])
+        feat_comp_region.append(b['feat_comp_region'])
+
+    feat_comp_pos = torch.cat(feat_comp_pos, 0)
+    feat_comp_neg = torch.cat(feat_comp_neg, 0)
+    feat_comp_region = torch.cat(feat_comp_region, 0)
+    # print(feat_comp.shape,feat_loc.shape,labels.shape)
+
+    assert (feat_comp_pos.shape[0] == feat_comp_neg.shape[0] and feat_comp_region.shape[0] == feat_comp_pos.shape[0] )
+
+    return {
+        "feat_comp_pos": feat_comp_pos,
+        "feat_comp_neg": feat_comp_neg,
+        "feat_comp_region": feat_comp_region,
+    }
+
+
+# =======================================================================================================================
+
 class TTADataset:
-    def __init__(self, root: Path, df: pd.DataFrame, tta_code , imgsize = 256):
+    def __init__(self, root: Path, df: pd.DataFrame, tta_code, imgsize=256):
         self._root = root
         self._df = df
         self._tta_code = tta_code
@@ -687,23 +875,23 @@ class TTADataset:
         return image, item.id
 
 
-def load_transform_image(item, root: Path, imgsize=256,debug: bool = False, name: str = 'train'):
+def load_transform_image(item, root: Path, imgsize=256, debug: bool = False, name: str = 'train'):
     image = load_image(item, root)
 
     if name == 'train':
         alpha = random.uniform(0, 0.2)
         image = do_brightness_shift(image, alpha=alpha)
         image = random_flip(image, p=0.5)
-        angle = random.uniform(0, 1)*360
+        angle = random.uniform(0, 1) * 360
         image = rotate(image, angle, center=None, scale=1.0)
         # ratio = random.uniform(0.75, 0.99)
         # image = random_cropping(image, ratio = ratio, is_random = True)
-        #image = random_erasing(image, probability=0.5, sl=0.02, sh=0.4, r1=0.3)
+        # image = random_erasing(image, probability=0.5, sl=0.02, sh=0.4, r1=0.3)
     else:
         pass
         # image = random_cropping(image, ratio=0.85, is_random=False)
 
-    #Padding
+    # Padding
     # maintain ratio of length and height
     # imgH, imgW, nCh = image.shape
     # nimgW, nimgH = max(imgW, imgH), max(imgW, imgH)
@@ -713,15 +901,15 @@ def load_transform_image(item, root: Path, imgsize=256,debug: bool = False, name
     # nimage = np.zeros((nimgH, nimgW, nCh), dtype=np.uint8)
     # nimage[offset_H:imgH+offset_H, offset_W:imgW+offset_W, :] = 1*image[:,:,:]
 
-    #Crop
+    # Crop
     if name == 'train':
         ratio = random.uniform(0.70, 0.99)
         nimage = random_cropping(image, ratio=ratio, is_random=True)
     else:
         nimage = random_cropping(image, ratio=0.8, is_random=False)
 
-    #Resize
-    image = cv2.resize(nimage ,(imgsize, imgsize))
+    # Resize
+    image = cv2.resize(nimage, (imgsize, imgsize))
 
     if debug:
         image.save('_debug.png')
@@ -741,10 +929,11 @@ def load_transform_image(item, root: Path, imgsize=256,debug: bool = False, name
 
     return torch.FloatTensor(image)
 
+
 def load_test_image(item, root: Path, tta_code, imgsize):
     image = load_image(item, root)
-    image = aug_image(image, augment = tta_code)
-    image = cv2.resize(image ,(imgsize, imgsize))
+    image = aug_image(image, augment=tta_code)
+    image = cv2.resize(image, (imgsize, imgsize))
 
     image = np.transpose(image, (2, 0, 1))
     image = image.astype(np.float32)
@@ -761,31 +950,31 @@ def load_test_image(item, root: Path, tta_code, imgsize):
 
     return torch.FloatTensor(image)
 
+
 def load_image(item, root: Path) -> Image.Image:
     # print(str(root + '/' + f'{item.id}.jpg'))
     # image = cv2.imread(str(root + '/' + f'{item.id}'))
-    image = cv2.imread( os.path.join(root,str(f'{item.id}')) )
+    image = cv2.imread(os.path.join(root, str(f'{item.id}')))
     # print(os.path.join(root,str(f'{item.id}')))
     # print()
     # print(image.shape)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     return image
 
+
 # image name looks like : idx_copy.jpg
 def get_ids(root: Path) -> List[str]:
     return sorted({p.name.split('_')[0] for p in root.glob('*.jpg')})
 
 
-
-
-def load_transform_image_iaa(item, root: Path, imgsize=256,debug: bool = False, name: str = 'train'):
+def load_transform_image_iaa(item, root: Path, imgsize=256, debug: bool = False, name: str = 'train'):
     image = load_image(item, root)
 
     if name == 'train':
         alpha = random.uniform(0, 0.2)
         image = do_brightness_shift(image, alpha=alpha)
         image = random_flip(image, p=0.5)
-        angle = random.uniform(0, 1)*360
+        angle = random.uniform(0, 1) * 360
         image = rotate(image, angle, center=None, scale=1.0)
         image_aug = iaa_transformer.act(image)
     else:
@@ -811,14 +1000,15 @@ def load_transform_image_iaa(item, root: Path, imgsize=256,debug: bool = False, 
 
     return torch.FloatTensor(image)
 
-def load_image_uint8(item, root: Path, imgsize=256,debug: bool = False, name: str = 'train'):
+
+def load_image_uint8(item, root: Path, imgsize=256, debug: bool = False, name: str = 'train'):
     image = load_image(item, root)
 
     if name == 'train':
         alpha = random.uniform(0, 0.2)
         image = do_brightness_shift(image, alpha=alpha)
         image = random_flip(image, p=0.5)
-        angle = random.uniform(0, 1)*360
+        angle = random.uniform(0, 1) * 360
         image_aug = rotate(image, angle, center=None, scale=1.0)
     else:
         image_aug = random_cropping(image, ratio=0.8, is_random=False)
@@ -829,15 +1019,16 @@ def load_image_uint8(item, root: Path, imgsize=256,debug: bool = False, name: st
         image.save('_debug.png')
     return image
 
-def save_img_debug(img,bbox):
-    h,w,c = img.shape
-    bbox_abs = [bbox[0]*w,bbox[1]*h,bbox[2]*w,bbox[3]*h]
-    bbox_abs = [bbox_abs[0]-bbox_abs[2]/2, bbox_abs[1]-bbox_abs[3]/2, bbox_abs[2], bbox_abs[3] ]
-    pt1 = [ int(bbox_abs[0]) , int(bbox_abs[1]) ]
-    pt2 = [ int(bbox_abs[0]+bbox_abs[2]), int(bbox_abs[1]+bbox_abs[3]) ]
-    nimg = np.array(img)
-    cv2.rectangle(nimg,tuple(pt1),tuple(pt2),(255,0,0),2)
 
-    postname = str(random.randint(0,100))
+def save_img_debug(img, bbox):
+    h, w, c = img.shape
+    bbox_abs = [bbox[0] * w, bbox[1] * h, bbox[2] * w, bbox[3] * h]
+    bbox_abs = [bbox_abs[0] - bbox_abs[2] / 2, bbox_abs[1] - bbox_abs[3] / 2, bbox_abs[2], bbox_abs[3]]
+    pt1 = [int(bbox_abs[0]), int(bbox_abs[1])]
+    pt2 = [int(bbox_abs[0] + bbox_abs[2]), int(bbox_abs[1] + bbox_abs[3])]
+    nimg = np.array(img)
+    cv2.rectangle(nimg, tuple(pt1), tuple(pt2), (255, 0, 0), 2)
+
+    postname = str(random.randint(0, 100))
     save_name = './img_tmp/m_debug_' + postname + '.jpeg'
-    cv2.imwrite(save_name,nimg)
+    cv2.imwrite(save_name, nimg)
