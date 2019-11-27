@@ -791,7 +791,7 @@ class TrainDatasetLocationRSRB(Dataset):
             featC = tbC.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
         elif self._name == 'train_fast':
             num_building_batch = 20
-            num_pos = 20  # each building
+            num_pos = 50  # each building
             num_region = self._maxK
 
             data_batch = num_pos + num_pos*num_region

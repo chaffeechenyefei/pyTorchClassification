@@ -71,6 +71,7 @@ def main():
     arg('--epoch-size', type=int)
     arg('--finetuning',action='store_true')
     arg('--testStep',type=int,default=500000)
+    arg('--trainStep',type=int,default=10000)
     arg('--citynum',type=int,default=5)
     arg('--apps',type=str,default='_191114.csv')
 
@@ -98,10 +99,10 @@ def main():
     valid_root = TT_DATA_ROOT
 
     ##::DataLoader
-    def make_loader(df_comp_feat: pd.DataFrame, df_pair: pd.DataFrame,
+    def make_loader(df_comp_feat: pd.DataFrame, df_pair: pd.DataFrame,trainStep=10000,
                     name='train', shuffle=True) -> DataLoader:
         return DataLoader(
-            TrainDatasetLocationRSRB(df_comp_feat=df_comp_feat, name = name ,df_pair=df_pair,citynum=args.citynum),
+            TrainDatasetLocationRSRB(df_comp_feat=df_comp_feat, name = name ,df_pair=df_pair,citynum=args.citynum,trainStep=trainStep),
             shuffle=shuffle,
             batch_size=args.batch_size,
             num_workers=args.workers,
@@ -141,7 +142,7 @@ def main():
         Path(str(run_root) + '/params.json').write_text(
             json.dumps(vars(args), indent=4, sort_keys=True))
 
-        train_loader = make_loader(df_comp_feat=df_comp_feat, df_pair=df_train_pair, name='train_fast')
+        train_loader = make_loader(df_comp_feat=df_comp_feat, df_pair=df_train_pair, name='train_fast',trainStep=args.trainStep)
         valid_loader = make_loader(df_comp_feat=df_comp_feat, df_pair=df_valid_pair, name='valid',shuffle=False)
 
         train_kwargs = dict(
