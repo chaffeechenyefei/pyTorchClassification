@@ -705,6 +705,12 @@ class TrainDatasetLocationRSRB(Dataset):
         self._citynum = citynum
         self._maxK = 20
         self._traintimes = trainStep
+        self.cldat = []
+        self.locname = []
+        if name in ['train','train_fast']:
+            for ind_city in range(citynum):
+                self.cldat.append(self._df_pair[(self._df_pair['fold'] == 0) & (self._df_pair['city'] == ind_city)])
+                self.locname.append(self.cldat[ind_city].groupby('atlas_location_uuid').head(1).reset_index(drop=True)[['atlas_location_uuid']])
 
     def __len__(self):
         if self._name in ['train','train_fast']:
@@ -719,7 +725,7 @@ class TrainDatasetLocationRSRB(Dataset):
         if self._name == 'train':
             #pick a city randomly
             ind_city = math.floor(random.random() * self._citynum)
-            cldat = self._df_pair[(self._df_pair['fold'] == 0) & (self._df_pair['city'] == ind_city)]
+            cldat = self.cldat[ind_city]
 
             fn = lambda obj: obj.loc[np.random.choice(obj.index, 1, True), :]
             cldatGrp = cldat.groupby('atlas_location_uuid')
@@ -799,11 +805,11 @@ class TrainDatasetLocationRSRB(Dataset):
             # num_neg_pair = 2*num_pos_pair
 
             ind_city = math.floor(random.random() * self._citynum)
-            cldat = self._df_pair[(self._df_pair['fold'] == 0) & (self._df_pair['city'] == ind_city)]
+            cldat = self.cldat[ind_city]
 
-            loc_name = cldat.groupby('atlas_location_uuid').head(1).reset_index(drop=True)[['atlas_location_uuid']]
+            # loc_name = cldat.groupby('atlas_location_uuid').head(1).reset_index(drop=True)[['atlas_location_uuid']]
             # start = time.time()
-            smp_loc_name = loc_name.sample(n=num_building_batch).reset_index(drop=True)
+            smp_loc_name = self.locname[ind_city].sample(n=num_building_batch).reset_index(drop=True)
             smp_cldat = cldat.merge(smp_loc_name, on='atlas_location_uuid', how='inner', suffixes=['', '_right'])
             # end = time.time()
             # print(end - start)
@@ -854,9 +860,13 @@ class TrainDatasetLocationRSRB(Dataset):
 
         else:
             dataLen = len(self._df_pair[self._df_pair['mk'] == 'A'])
+            dataLenB = len(self._df_pair[self._df_pair['mk'] == 'B'])
             inds = idx * self._step
             inde = min((idx + 1) * self._step, dataLen) - 1  # loc[a,b] = [a,b] close set!!
             # res_dat = self._df_pair.loc[inds:inde, ['duns_number', 'atlas_location_uuid','city','mk']]
+
+            indsB = idx * self._step * self._maxK
+            indeB = min((idx + 1) * self._step * self._maxK, dataLenB) - 1  # loc[a,b] = [a,b] close set!!
 
             list_col = list(self._df_comp_feat.columns)
             list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
@@ -869,7 +879,7 @@ class TrainDatasetLocationRSRB(Dataset):
                 by=['city', 'atlas_location_uuid']).reset_index(drop=True)
 
             datA = datA.loc[inds:inde, ['duns_number', 'atlas_location_uuid','city','mk']]
-            datB = datB.loc[inds*self._maxK:inde*self._maxK, ['duns_number', 'atlas_location_uuid','city','mk']]
+            datB = datB.loc[indsB:indeB, ['duns_number', 'atlas_location_uuid','city','mk']]
             datC = datC.loc[inds:inde, ['duns_number', 'atlas_location_uuid', 'city', 'mk']]
 
             featA = datA.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
@@ -882,6 +892,8 @@ class TrainDatasetLocationRSRB(Dataset):
         featCompPos = torch.FloatTensor(featA)#B,D
         featRegion = torch.FloatTensor(featB)
         N, featdim = featRegion.shape
+        # print(featA.shape,featB.shape,featC.shape)
+        assert(N==featCompPos.shape[0]*self._maxK)
 
         featRegion = featRegion.view(-1, self._maxK, featdim)#B,K,D
 

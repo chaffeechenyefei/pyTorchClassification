@@ -70,7 +70,7 @@ def main():
     arg('--n-epochs', type=int, default=80)
     arg('--epoch-size', type=int)
     arg('--finetuning',action='store_true')
-    arg('--testStep',type=int,default=500000)
+    arg('--testStep',type=int,default=50000)
     arg('--trainStep',type=int,default=10000)
     arg('--citynum',type=int,default=5)
     arg('--apps',type=str,default='_191114.csv')
@@ -348,7 +348,7 @@ def validation(
             loss = softmax_loss(outputs, targets)
 
             all_predictions.append(outputs)
-            all_targets = all_targets.append(targets)
+            all_targets.append(targets)
             all_losses.append(loss.data.cpu().numpy())
 
     all_predictions = torch.cat(all_predictions)
