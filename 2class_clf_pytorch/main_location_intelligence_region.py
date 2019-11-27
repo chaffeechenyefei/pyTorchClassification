@@ -141,7 +141,7 @@ def main():
         Path(str(run_root) + '/params.json').write_text(
             json.dumps(vars(args), indent=4, sort_keys=True))
 
-        train_loader = make_loader(df_comp_feat=df_comp_feat, df_pair=df_train_pair, name='train')
+        train_loader = make_loader(df_comp_feat=df_comp_feat, df_pair=df_train_pair, name='train_fast')
         valid_loader = make_loader(df_comp_feat=df_comp_feat, df_pair=df_valid_pair, name='valid',shuffle=False)
 
         train_kwargs = dict(
@@ -254,17 +254,21 @@ def train(args, model: nn.Module, criterion, *, params,
                 model_output_pos = model(feat_comp=featCompPos, feat_K_comp=featRegion)
                 model_output_neg = model(feat_comp=featCompNeg, feat_K_comp=featRegion)
 
-                outputs = torch.cat( [ model_output_pos['outputs'], model_output_neg['outputs'] ], dim = 0)
+                # outputs = torch.cat( [ model_output_pos['outputs'], model_output_neg['outputs'] ], dim = 0)
 
                 nP,nN = model_output_pos['outputs'].shape[0], model_output_neg['outputs'].shape[0]
                 target_pos = torch.ones((nP,1),dtype=torch.long)
                 target_neg = torch.zeros((nN, 1), dtype=torch.long)
-                targets = torch.cat( [ target_pos, target_neg ], dim = 0)
+                # targets = torch.cat( [ target_pos, target_neg ], dim = 0)
 
                 if use_cuda:
-                    targets = targets.cuda()
+                    # targets = targets.cuda()
+                    target_pos = target_pos.cuda()
+                    target_neg = target_neg.cuda()
 
-                loss = softmax_loss(outputs, targets)
+                lossP = softmax_loss(model_output_pos['outputs'], target_pos)
+                lossN = softmax_loss(model_output_neg['outputs'], target_neg)
+                loss = lossP + 0.8*lossN
                 lossType = 'softmax'
 
                 batch_size = nP+nN
@@ -274,7 +278,7 @@ def train(args, model: nn.Module, criterion, *, params,
                     optimizer.step()
                     optimizer.zero_grad()
                     step += 1
-                tq.update(1)
+                tq.update(1*args.batch_size)
                 losses.append(loss.item())
                 mean_loss = np.mean(losses[-report_each:])
                 tq.set_postfix(loss=f'{mean_loss:.3f}')

@@ -14,6 +14,7 @@ from transforms import tensor_transform
 from aug import *
 from transforms import iaaTransform
 import math
+import time
 
 # image_size = 256
 
@@ -706,7 +707,7 @@ class TrainDatasetLocationRSRB(Dataset):
         self._traintimes = trainStep
 
     def __len__(self):
-        if self._name == 'train':
+        if self._name in ['train','train_fast']:
             return self._traintimes
         else:
             return math.ceil(len(self._df_pair) / self._step)  # len of pair
@@ -781,6 +782,68 @@ class TrainDatasetLocationRSRB(Dataset):
             tbC = tbC.sort_values(by='atlas_location_uuid')
 
             assert (len(tbA) == len(tbC) and len(tbB) == len(tbA) * self._maxK)
+
+            list_col = list(self._df_comp_feat.columns)
+            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
+
+            featA = tbA.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
+            featB = tbB.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
+            featC = tbC.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
+        elif self._name == 'train_fast':
+            num_building_batch = 20
+            num_pos = 20  # each building
+            num_region = self._maxK
+
+            data_batch = num_pos + num_pos*num_region
+            num_pos_pair = num_pos * num_building_batch
+            # num_neg_pair = 2*num_pos_pair
+
+            ind_city = math.floor(random.random() * self._citynum)
+            cldat = self._df_pair[(self._df_pair['fold'] == 0) & (self._df_pair['city'] == ind_city)]
+
+            loc_name = cldat.groupby('atlas_location_uuid').head(1).reset_index(drop=True)[['atlas_location_uuid']]
+            # start = time.time()
+            smp_loc_name = loc_name.sample(n=num_building_batch).reset_index(drop=True)
+            smp_cldat = cldat.merge(smp_loc_name, on='atlas_location_uuid', how='inner', suffixes=['', '_right'])
+            # end = time.time()
+            # print(end - start)
+            # print(len(smp_cldat))
+
+            # start = time.time()
+            cldatGrp = smp_cldat.groupby('atlas_location_uuid')
+            tbAB = cldatGrp.apply(lambda x: x.sample(data_batch, replace=True)).reset_index(drop=True)[
+                ['duns_number', 'atlas_location_uuid']]
+            # end = time.time()
+            # print(end - start)
+
+            # start = time.time()
+            tbABGrp = tbAB.groupby('atlas_location_uuid')
+            tbA = tbABGrp.head(num_pos).reset_index(drop=True)
+            # end = time.time()
+            # print(len(tbA))
+            # print(end - start)
+
+            # start = time.time()
+            tbB = tbABGrp.tail(num_pos*num_region).reset_index(drop=True)
+            # end = time.time()
+            # print(end - start)
+            # print(len(tbB))
+
+            assert (len(tbA) == num_pos_pair)
+
+            # start = time.time()
+            smp_loc_name_pair = \
+                pd.concat([smp_loc_name,
+                           smp_loc_name.sample(frac=1, replace=True).reset_index(drop=True) \
+                          .rename(columns={'atlas_location_uuid': 'atlas_location_uuid_neg'})], axis=1)
+            tbC = tbA \
+                .merge(smp_loc_name_pair,
+                       on='atlas_location_uuid', how='inner', suffixes=['', '_right']) \
+                [['duns_number', 'atlas_location_uuid', 'atlas_location_uuid_neg']].reset_index(drop=True)
+
+            tbA = tbA.sort_values(by='atlas_location_uuid').reset_index(drop=True)
+            tbB = tbB.sort_values(by='atlas_location_uuid').reset_index(drop=True)
+            tbC = tbC.sort_values(by='atlas_location_uuid').reset_index(drop=True)
 
             list_col = list(self._df_comp_feat.columns)
             list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
