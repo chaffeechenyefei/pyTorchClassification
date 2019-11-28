@@ -229,7 +229,7 @@ class RegionModelv3(nn.Module):
     others remain same as Deep and Wide
     """
     def __init__(self, feat_comp_dim=102,feat_loc_dim=23):
-
+        super().__init__()
         self.emb_feat_comp_dim = 64
         self.feat_region_dim = 64
 
