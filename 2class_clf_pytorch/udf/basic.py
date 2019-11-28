@@ -1,6 +1,7 @@
 from skimage.util import view_as_windows as viewW
 import numpy as np
 import pickle
+import time
 
 #=======================================================================================================================
 # list -> str
@@ -149,6 +150,35 @@ def topk_recall_score_all(pred,truth,topk=5):
     # nTop = np.array(range(topk)).reshape(1,topk) + 1
     recall_score = (recall_score / N)
     return recall_score
+
+class timer(object):
+    def __init__(self,it:str='',display=True):
+        self._start = 0
+        self._end = 0
+        self._name = it
+        self._display = display
+        pass
+
+    def start(self,it:str):
+        self._start = time.time()
+        if it is not None:
+            self._name = it
+        else:
+            pass
+
+    def end(self):
+        self._end = time.time()
+
+    def diff(self):
+        tt = self._end-self._start
+        return tt
+
+    def eclapse(self):
+        self.end()
+        tt = self.diff()
+        if self._display:
+            print('<<%s>> eclapse: %f sec...'%(self._name,tt))
+
 
 #=======================================================================================================================
 # main

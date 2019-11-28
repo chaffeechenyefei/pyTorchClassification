@@ -14,8 +14,7 @@ from transforms import tensor_transform
 from aug import *
 from transforms import iaaTransform
 import math
-import time
-
+from udf.basic import timer
 # image_size = 256
 
 iaa_transformer = iaaTransform()
@@ -711,6 +710,7 @@ class TrainDatasetLocationRSRB(Dataset):
             for ind_city in range(citynum):
                 self.cldat.append(self._df_pair[(self._df_pair['fold'] == 0) & (self._df_pair['city'] == ind_city)])
                 self.locname.append(self.cldat[ind_city].groupby('atlas_location_uuid').head(1).reset_index(drop=True)[['atlas_location_uuid']])
+        self._debug = True
 
     def __len__(self):
         if self._name in ['train','train_fast']:
@@ -722,6 +722,7 @@ class TrainDatasetLocationRSRB(Dataset):
         return 0
 
     def __getitem__(self, idx: int):
+        tc = timer(display=self._debug)
         if self._name == 'train':
             #pick a city randomly
             ind_city = math.floor(random.random() * self._citynum)
@@ -807,37 +808,27 @@ class TrainDatasetLocationRSRB(Dataset):
             ind_city = math.floor(random.random() * self._citynum)
             cldat = self.cldat[ind_city]
 
-            # loc_name = cldat.groupby('atlas_location_uuid').head(1).reset_index(drop=True)[['atlas_location_uuid']]
-            # start = time.time()
+            tc.start(it='location selection')
             smp_loc_name = self.locname[ind_city].sample(n=num_building_batch).reset_index(drop=True)
             smp_cldat = cldat.merge(smp_loc_name, on='atlas_location_uuid', how='inner', suffixes=['', '_right'])
-            # end = time.time()
-            # print(end - start)
-            # print(len(smp_cldat))
+            tc.eclapse()
 
-            # start = time.time()
+            tc.start(it='sample pos and region data')
             cldatGrp = smp_cldat.groupby('atlas_location_uuid')
             tbAB = cldatGrp.apply(lambda x: x.sample(data_batch, replace=True)).reset_index(drop=True)[
                 ['duns_number', 'atlas_location_uuid']]
-            # end = time.time()
-            # print(end - start)
+            tc.eclapse()
 
-            # start = time.time()
+            tc.start(it='create tbA and tbB')
             tbABGrp = tbAB.groupby('atlas_location_uuid')
             tbA = tbABGrp.head(num_pos).reset_index(drop=True)
-            # end = time.time()
-            # print(len(tbA))
-            # print(end - start)
 
-            # start = time.time()
             tbB = tbABGrp.tail(num_pos*num_region).reset_index(drop=True)
-            # end = time.time()
-            # print(end - start)
-            # print(len(tbB))
+            tc.eclapse()
 
             assert (len(tbA) == num_pos_pair)
 
-            # start = time.time()
+            tc.start(it='get location neg pairs')
             smp_loc_name_pair = \
                 pd.concat([smp_loc_name,
                            smp_loc_name.sample(frac=1, replace=True).reset_index(drop=True) \
@@ -846,17 +837,22 @@ class TrainDatasetLocationRSRB(Dataset):
                 .merge(smp_loc_name_pair,
                        on='atlas_location_uuid', how='inner', suffixes=['', '_right']) \
                 [['duns_number', 'atlas_location_uuid', 'atlas_location_uuid_neg']].reset_index(drop=True)
+            tc.eclapse()
 
+            tc.start('sort')
             tbA = tbA.sort_values(by='atlas_location_uuid').reset_index(drop=True)
             tbB = tbB.sort_values(by='atlas_location_uuid').reset_index(drop=True)
             tbC = tbC.sort_values(by='atlas_location_uuid').reset_index(drop=True)
+            tc.eclapse()
 
             list_col = list(self._df_comp_feat.columns)
             list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
 
+            tc.start('merge')
             featA = tbA.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
             featB = tbB.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
             featC = tbC.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
+            tc.eclapse()
 
         else:
             dataLen = len(self._df_pair[self._df_pair['mk'] == 'A'])
@@ -887,6 +883,7 @@ class TrainDatasetLocationRSRB(Dataset):
             featC = datC.merge(self._df_comp_feat, on='duns_number', how='left', suffixes=['', '_right'])[list_col]
 
         # all branch need such operation...
+        tc.start('Transfer storage')
         featA, featB, featC = featA.to_numpy(), featB.to_numpy(), featC.to_numpy()
 
         featCompPos = torch.FloatTensor(featA)#B,D
@@ -898,6 +895,7 @@ class TrainDatasetLocationRSRB(Dataset):
         featRegion = featRegion.view(-1, self._maxK, featdim)#B,K,D
 
         featCompNeg = torch.FloatTensor(featC)#B,D
+        tc.eclapse()
 
         return {
             "feat_comp_pos": featCompPos,
