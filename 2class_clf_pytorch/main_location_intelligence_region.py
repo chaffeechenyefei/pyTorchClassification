@@ -269,7 +269,7 @@ def train(args, model: nn.Module, criterion, *, params,
 
                 lossP = softmax_loss(model_output_pos['outputs'], target_pos)
                 lossN = softmax_loss(model_output_neg['outputs'], target_neg)
-                loss = lossP + 0.8*lossN
+                loss = lossP + lossN
                 lossType = 'softmax'
 
                 batch_size = nP+nN

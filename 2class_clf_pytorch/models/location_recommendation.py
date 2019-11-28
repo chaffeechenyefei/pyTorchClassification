@@ -79,10 +79,10 @@ class setLinearLayer(nn.Module):
         B,K,fin = feat_set.shape
         assert(fin==self._fin)
         feat_out = torch.zeros(B ,self._fout, self._fmid)  # [B,fout,fmid]
-        pool = F.max_pool1d(K)
+        pool = F.max_pool1d
         for i in range(self._fout):
             feat_mid = self.nets[i](feat_set)  # [B,K,fin]->[B,K,fmid]
-            feat_mid = pool(feat_mid.permute(0,2,1)).squeeze()#[B,K,fmid]-permute>[B,fmid,K]-pool>[B,fmid,1]->[B,fmid]
+            feat_mid = pool(feat_mid.permute(0,2,1),K).squeeze()#[B,K,fmid]-permute>[B,fmid,K]-pool>[B,fmid,1]->[B,fmid]
             feat_out[:,i,:] = feat_mid
         #feat_out = [B,fout,fmid]
         return feat_out
@@ -154,7 +154,7 @@ class RegionModelv1(nn.Module):
         emb_feat_comp = self.netEmb(feat_comp)
         emb_feat_K_comp = self.netEmb(feat_K_comp)
 
-        single_feat_comp = self.netSng(feat_set = emb_feat_comp)
+        single_feat_comp = self.netSng(emb_feat_comp)
         region_feat_comp = self.netReg(feat_set=emb_feat_K_comp,type='maxpooling')
 
         concat_feat = torch.cat([single_feat_comp,region_feat_comp],dim=1)
