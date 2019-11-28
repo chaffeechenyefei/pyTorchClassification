@@ -604,12 +604,12 @@ class TrainDatasetLocationRS(Dataset):
         # concate training pair with location/company feature
         F_res_dat = pd.merge(res_dat, self._df_comp_feat, on='duns_number', how='left')
         list_col = list(self._df_comp_feat.columns)
-        list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
+        list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label','city']]
         FeatComp = F_res_dat[list_col].to_numpy()
 
         F_res_dat = pd.merge(res_dat, self._df_loc_feat, on='atlas_location_uuid', how='left')
         list_col = list(self._df_loc_feat.columns)
-        list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
+        list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label','city']]
         # print(list_col)
         FeatLoc = F_res_dat[list_col].to_numpy()
 
@@ -617,7 +617,7 @@ class TrainDatasetLocationRS(Dataset):
             F_res_dat = pd.merge(res_dat, self._df_ensemble_score, on=['atlas_location_uuid', 'duns_number'],
                                  how='left')
             list_col = list(self._df_ensemble_score.columns)
-            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
+            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label','city']]
             # print(list_col)
             FeatEnsembleScore = F_res_dat[list_col].to_numpy()
         else:
@@ -706,10 +706,12 @@ class TrainDatasetLocationRSRB(Dataset):
         self._traintimes = trainStep
         self.cldat = []
         self.locname = []
+        self.df_comp_feat_city = []
         if name in ['train','train_fast']:
             for ind_city in range(citynum):
                 self.cldat.append(self._df_pair[(self._df_pair['fold'] == 0) & (self._df_pair['city'] == ind_city)])
                 self.locname.append(self.cldat[ind_city].groupby('atlas_location_uuid').head(1).reset_index(drop=True)[['atlas_location_uuid']])
+                self.df_comp_feat_city.append(self._df_comp_feat[self._df_comp_feat['city']==ind_city].reset_index(drop=True))
         self._debug = True
 
     def __len__(self):
@@ -791,7 +793,7 @@ class TrainDatasetLocationRSRB(Dataset):
             assert (len(tbA) == len(tbC) and len(tbB) == len(tbA) * self._maxK)
 
             list_col = list(self._df_comp_feat.columns)
-            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
+            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label','city']]
 
             featA = tbA.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
             featB = tbB.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
@@ -846,12 +848,21 @@ class TrainDatasetLocationRSRB(Dataset):
             tc.eclapse()
 
             list_col = list(self._df_comp_feat.columns)
-            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
+            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label','city']]
 
             tc.start('merge')
-            featA = tbA.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
-            featB = tbB.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
-            featC = tbC.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
+            tbACB = pd.concat([tbA, tbC, tbB], axis=0, sort=False).reset_index(drop=True)
+            featACB = tbACB.merge(self.df_comp_feat_city[ind_city], on='duns_number', how='left', suffixes=['', '_right'])[list_col]
+
+            featA = featACB.loc[:num_pos_pair - 1]
+            featC = featACB.loc[num_pos_pair:2 * num_pos_pair - 1]
+            featB = featACB.loc[2 * num_pos_pair:]
+
+            assert(len(featC)==len(featA))
+
+            # featA = tbA.merge(self.df_comp_feat_city[ind_city],on='duns_number',how='left',suffixes=['','_right'])[list_col]
+            # featB = tbB.merge(self.df_comp_feat_city[ind_city],on='duns_number',how='left',suffixes=['','_right'])[list_col]
+            # featC = tbC.merge(self.df_comp_feat_city[ind_city],on='duns_number',how='left',suffixes=['','_right'])[list_col]
             tc.eclapse()
 
         else:
@@ -865,7 +876,7 @@ class TrainDatasetLocationRSRB(Dataset):
             indeB = min((idx + 1) * self._step * self._maxK, dataLenB) - 1  # loc[a,b] = [a,b] close set!!
 
             list_col = list(self._df_comp_feat.columns)
-            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label']]
+            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label','city']]
 
             datA = self._df_pair[self._df_pair['mk'] == 'A'].sort_values(
                 by=['city', 'atlas_location_uuid']).reset_index(drop=True)
