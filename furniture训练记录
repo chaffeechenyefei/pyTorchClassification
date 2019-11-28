@@ -119,5 +119,5 @@ python3 get_sub_recommend_reason_after_similarity.py --run_root ~/location_recom
 python3 get_csv_for_training_and_testing_region_model.py --run_root /home/ubuntu/location_recommender_system --app_date _191114
 python3 main_location_intelligence_region.py --run_root result/location_RSRBv1_191114 --model location_recommend_region_model_v1 --lr 0.01 --mode train --trainStep 1000 --batch-size 2 --workers 4
 nohup python3 -u main_location_intelligence_region.py --run_root result/location_RSRBv1_191114 --model location_recommend_region_model_v1 --lr 0.01 --mode train --trainStep 1000 --batch-size 4 >mlir_1.out 2>mlir_1.err &
-
+python3 main_location_intelligence_region.py --run_root result/location_RSRBv1_191114 --model location_recommend_region_model_v1 --lr 0.01 --mode train --trainStep 1000 --batch-size 1
 

@@ -139,6 +139,10 @@ class RegionModelv1(nn.Module):
         self._feat_comp_dim = feat_comp_dim
         self.netEmb = companyMLP(fid=feat_comp_dim,fod=self.emb_feat_comp_dim)
         self.netReg = setLinearLayerConv1d(fin=self.emb_feat_comp_dim,fout=self.feat_region_dim)
+        self.netSng = nn.Sequential(
+            nn.Linear(in_features=self.emb_feat_comp_dim,out_features=self.feat_region_dim),
+            nn.LeakyReLU()
+        )
         feat_cls_dim = 32
         self.netClf = nn.Sequential(
             nn.Linear(in_features=self.feat_region_dim+self.feat_region_dim,out_features=feat_cls_dim),
@@ -150,7 +154,7 @@ class RegionModelv1(nn.Module):
         emb_feat_comp = self.netEmb(feat_comp)
         emb_feat_K_comp = self.netEmb(feat_K_comp)
 
-        single_feat_comp = self.netReg(feat_set = emb_feat_comp.unsqueeze(1),type='maxpooling')
+        single_feat_comp = self.netSng(feat_set = emb_feat_comp)
         region_feat_comp = self.netReg(feat_set=emb_feat_K_comp,type='maxpooling')
 
         concat_feat = torch.cat([single_feat_comp,region_feat_comp],dim=1)

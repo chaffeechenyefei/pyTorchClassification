@@ -531,7 +531,7 @@ class TrainDatasetLocationRS(Dataset):
                  df_loc_feat: pd.DataFrame,
                  df_pair: pd.DataFrame,
                  df_ensemble_score, flag_ensemble: bool,
-                 emb_dict: dict,
+                 emb_dict: dict,citynum=5,
                  name: str = 'train', posN=100, negN=200, testStep=500000):
         super().__init__()
         self._df_comp_feat = df_comp_feat.fillna(0)
