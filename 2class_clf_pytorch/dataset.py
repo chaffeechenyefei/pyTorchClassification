@@ -712,7 +712,7 @@ class TrainDatasetLocationRSRB(Dataset):
                 self.cldat.append(self._df_pair[(self._df_pair['fold'] == 0) & (self._df_pair['city'] == ind_city)])
                 self.locname.append(self.cldat[ind_city].groupby('atlas_location_uuid').head(1).reset_index(drop=True)[['atlas_location_uuid']])
                 self.df_comp_feat_city.append(self._df_comp_feat[self._df_comp_feat['city']==ind_city].reset_index(drop=True))
-        self._debug = True
+        self._debug = False
 
     def __len__(self):
         if self._name in ['train','train_fast']:
