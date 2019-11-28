@@ -691,13 +691,13 @@ def collate_TrainDatasetLocationRS(batch):
 # =======================================================================================================================
 class TrainDatasetLocationRSRB(Dataset):
     def __init__(self, df_comp_feat: pd.DataFrame,
-                 # df_loc_feat: pd.DataFrame,
+                 df_loc_feat: pd.DataFrame,
                  df_pair: pd.DataFrame,
                  citynum=5,
                  name: str = 'train', trainStep=10000, testStep=500000):
         super().__init__()
         self._df_comp_feat = df_comp_feat.fillna(0)
-        # self._df_loc_feat = df_loc_feat.fillna(0)
+        self._df_loc_feat = df_loc_feat.fillna(0)
         self._df_pair = df_pair.reset_index()
         self._name = name
         self._step = testStep
@@ -713,6 +713,7 @@ class TrainDatasetLocationRSRB(Dataset):
                 self.locname.append(self.cldat[ind_city].groupby('atlas_location_uuid').head(1).reset_index(drop=True)[['atlas_location_uuid']])
                 self.df_comp_feat_city.append(self._df_comp_feat[self._df_comp_feat['city']==ind_city].reset_index(drop=True))
         self._debug = False
+        self._not_cols = ['duns_number', 'atlas_location_uuid', 'label','city']
 
     def __len__(self):
         if self._name in ['train','train_fast']:
@@ -726,78 +727,79 @@ class TrainDatasetLocationRSRB(Dataset):
     def __getitem__(self, idx: int):
         tc = timer(display=self._debug)
         if self._name == 'train':
-            #pick a city randomly
-            ind_city = math.floor(random.random() * self._citynum)
-            cldat = self.cldat[ind_city]
-
-            fn = lambda obj: obj.loc[np.random.choice(obj.index, 1, True), :]
-            cldatGrp = cldat.groupby('atlas_location_uuid')
-            tbA = cldatGrp.apply(fn).reset_index(drop=True)[
-                ['duns_number', 'atlas_location_uuid']]
-            # print('1.len of tbA %d:' % len(tbA))
-            fn = lambda obj: obj.loc[np.random.choice(obj.index, self._maxK, True), :]
-            tbB = cldatGrp.apply(fn).reset_index(drop=True)[
-                ['duns_number', 'atlas_location_uuid']]
-            # print('1.len of tbB %d' % len(tbB))
-
-            ###======================Pos=============================###
-            tbA['mk'] = 'A'
-            tbB = tbB.merge(tbA, on=['duns_number', 'atlas_location_uuid'], how='left', suffixes=['', '_right'])
-            tbB = tbB[tbB['mk'].isnull()]
-            # print('2.len of tbB not included in tbA %d' % len(tbB))
-            # we need to full fill the data
-            tbBGrp = tbB.groupby('atlas_location_uuid')
-            tbB = tbBGrp.apply(fn).reset_index(drop=True)[
-                ['duns_number', 'atlas_location_uuid']]
-            tbB['mk'] = 'B'
-            # print('3.len of tbB full filled again %d' % len(tbB))
-            # in case tbB cut some locations from tbA, lets shrink tbA
-            tblocB = tbBGrp.first().reset_index()
-            tblocB['mk'] = 'B'
-            # print('4.len of locations in tbB %d' % len(tblocB))
-            tbA = tbA.merge(tblocB, on='atlas_location_uuid', how='left', suffixes=['', '_right'])
-            tbA = tbA[tbA['mk_right'].notnull()][['duns_number', 'atlas_location_uuid', 'mk']].reset_index(drop=True)
-            # print('4.len of tbA with common locations of tbB %d' % len(tbA))
-
-            ###======================Neg=============================###
-            tbAA = pd.concat([tbA, tbA.sample(frac=1).reset_index() \
-                             .rename(
-                columns={'duns_number': 'duns_number_n', 'atlas_location_uuid': 'atlas_location_uuid_n', 'mk': 'mk_n'})]
-                             , axis=1)
-            # print('5.len of negpair %d' % len(tbAA))
-            tbAA = tbAA.merge(cldat, \
-                              left_on=['duns_number_n', 'atlas_location_uuid'],
-                              right_on=['duns_number', 'atlas_location_uuid'], \
-                              how='left', suffixes=['', '_right'])
-
-            tbC = tbAA[tbAA['duns_number_right'].isnull()][['duns_number_n', 'atlas_location_uuid']] \
-                .rename(columns={'duns_number_n': 'duns_number'})
-            # print('6.len of neg data %d' % len(tbC))
-
-            # in case tbC cut some locations from tbA and tbB
-            tbC['mk'] = 'C'
-            tblocC = tbC.groupby('atlas_location_uuid').first().reset_index()
-            # print('6.locations in neg data %d' % len(tblocC))
-            tbA = tbA.merge(tblocC, on='atlas_location_uuid', how='left', suffixes=['', '_right'])
-            tbA = tbA[tbA['mk_right'].notnull()][['duns_number', 'atlas_location_uuid', 'mk']].reset_index(drop=True)
-            # print('final tbA len %d' % len(tbA))
-
-            tbB = tbB.merge(tblocC, on='atlas_location_uuid', how='left', suffixes=['', '_right'])
-            tbB = tbB[tbB['mk_right'].notnull()][['duns_number', 'atlas_location_uuid', 'mk']].reset_index(drop=True)
-            # print('final tbB len %d' % len(tbB))
-
-            tbA = tbA.sort_values(by='atlas_location_uuid')
-            tbB = tbB.sort_values(by='atlas_location_uuid')
-            tbC = tbC.sort_values(by='atlas_location_uuid')
-
-            assert (len(tbA) == len(tbC) and len(tbB) == len(tbA) * self._maxK)
-
-            list_col = list(self._df_comp_feat.columns)
-            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label','city']]
-
-            featA = tbA.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
-            featB = tbB.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
-            featC = tbC.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
+            pass
+            # #pick a city randomly
+            # ind_city = math.floor(random.random() * self._citynum)
+            # cldat = self.cldat[ind_city]
+            #
+            # fn = lambda obj: obj.loc[np.random.choice(obj.index, 1, True), :]
+            # cldatGrp = cldat.groupby('atlas_location_uuid')
+            # tbA = cldatGrp.apply(fn).reset_index(drop=True)[
+            #     ['duns_number', 'atlas_location_uuid']]
+            # # print('1.len of tbA %d:' % len(tbA))
+            # fn = lambda obj: obj.loc[np.random.choice(obj.index, self._maxK, True), :]
+            # tbB = cldatGrp.apply(fn).reset_index(drop=True)[
+            #     ['duns_number', 'atlas_location_uuid']]
+            # # print('1.len of tbB %d' % len(tbB))
+            #
+            # ###======================Pos=============================###
+            # tbA['mk'] = 'A'
+            # tbB = tbB.merge(tbA, on=['duns_number', 'atlas_location_uuid'], how='left', suffixes=['', '_right'])
+            # tbB = tbB[tbB['mk'].isnull()]
+            # # print('2.len of tbB not included in tbA %d' % len(tbB))
+            # # we need to full fill the data
+            # tbBGrp = tbB.groupby('atlas_location_uuid')
+            # tbB = tbBGrp.apply(fn).reset_index(drop=True)[
+            #     ['duns_number', 'atlas_location_uuid']]
+            # tbB['mk'] = 'B'
+            # # print('3.len of tbB full filled again %d' % len(tbB))
+            # # in case tbB cut some locations from tbA, lets shrink tbA
+            # tblocB = tbBGrp.first().reset_index()
+            # tblocB['mk'] = 'B'
+            # # print('4.len of locations in tbB %d' % len(tblocB))
+            # tbA = tbA.merge(tblocB, on='atlas_location_uuid', how='left', suffixes=['', '_right'])
+            # tbA = tbA[tbA['mk_right'].notnull()][['duns_number', 'atlas_location_uuid', 'mk']].reset_index(drop=True)
+            # # print('4.len of tbA with common locations of tbB %d' % len(tbA))
+            #
+            # ###======================Neg=============================###
+            # tbAA = pd.concat([tbA, tbA.sample(frac=1).reset_index() \
+            #                  .rename(
+            #     columns={'duns_number': 'duns_number_n', 'atlas_location_uuid': 'atlas_location_uuid_n', 'mk': 'mk_n'})]
+            #                  , axis=1)
+            # # print('5.len of negpair %d' % len(tbAA))
+            # tbAA = tbAA.merge(cldat, \
+            #                   left_on=['duns_number_n', 'atlas_location_uuid'],
+            #                   right_on=['duns_number', 'atlas_location_uuid'], \
+            #                   how='left', suffixes=['', '_right'])
+            #
+            # tbC = tbAA[tbAA['duns_number_right'].isnull()][['duns_number_n', 'atlas_location_uuid']] \
+            #     .rename(columns={'duns_number_n': 'duns_number'})
+            # # print('6.len of neg data %d' % len(tbC))
+            #
+            # # in case tbC cut some locations from tbA and tbB
+            # tbC['mk'] = 'C'
+            # tblocC = tbC.groupby('atlas_location_uuid').first().reset_index()
+            # # print('6.locations in neg data %d' % len(tblocC))
+            # tbA = tbA.merge(tblocC, on='atlas_location_uuid', how='left', suffixes=['', '_right'])
+            # tbA = tbA[tbA['mk_right'].notnull()][['duns_number', 'atlas_location_uuid', 'mk']].reset_index(drop=True)
+            # # print('final tbA len %d' % len(tbA))
+            #
+            # tbB = tbB.merge(tblocC, on='atlas_location_uuid', how='left', suffixes=['', '_right'])
+            # tbB = tbB[tbB['mk_right'].notnull()][['duns_number', 'atlas_location_uuid', 'mk']].reset_index(drop=True)
+            # # print('final tbB len %d' % len(tbB))
+            #
+            # tbA = tbA.sort_values(by='atlas_location_uuid')
+            # tbB = tbB.sort_values(by='atlas_location_uuid')
+            # tbC = tbC.sort_values(by='atlas_location_uuid')
+            #
+            # assert (len(tbA) == len(tbC) and len(tbB) == len(tbA) * self._maxK)
+            #
+            # list_col = list(self._df_comp_feat.columns)
+            # list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label','city']]
+            #
+            # featA = tbA.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
+            # featB = tbB.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
+            # featC = tbC.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
         elif self._name == 'train_fast':
             num_building_batch = 20
             num_pos = 50  # each building
@@ -848,21 +850,22 @@ class TrainDatasetLocationRSRB(Dataset):
             tc.eclapse()
 
             list_col = list(self._df_comp_feat.columns)
-            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label','city']]
+            list_col = [col for col in list_col if col not in self._not_cols]
 
             tc.start('merge')
             tbACB = pd.concat([tbA, tbC, tbB], axis=0, sort=False).reset_index(drop=True)
-            featACB = tbACB.merge(self.df_comp_feat_city[ind_city], on='duns_number', how='left', suffixes=['', '_right'])[list_col]
+            featACB_comp = tbACB.merge(self.df_comp_feat_city[ind_city], on='duns_number', how='left', suffixes=['', '_right'])[list_col]
 
-            featA = featACB.loc[:num_pos_pair - 1]
-            featC = featACB.loc[num_pos_pair:2 * num_pos_pair - 1]
-            featB = featACB.loc[2 * num_pos_pair:]
+            featA = featACB_comp.loc[:num_pos_pair - 1]
+            featC = featACB_comp.loc[num_pos_pair:2 * num_pos_pair - 1]
+            featB = featACB_comp.loc[2 * num_pos_pair:]
 
             assert(len(featC)==len(featA))
 
-            # featA = tbA.merge(self.df_comp_feat_city[ind_city],on='duns_number',how='left',suffixes=['','_right'])[list_col]
-            # featB = tbB.merge(self.df_comp_feat_city[ind_city],on='duns_number',how='left',suffixes=['','_right'])[list_col]
-            # featC = tbC.merge(self.df_comp_feat_city[ind_city],on='duns_number',how='left',suffixes=['','_right'])[list_col]
+            list_col = list(self._df_loc_feat.columns)
+            list_col = [col for col in list_col if col not in self._not_cols]
+            # tbA and tbB share the same location, thus tbA is used.
+            featB_loc = tbA.merge(self._df_loc_feat,on='atlas_location_uuid',how='left',suffixes=['','_right'])[list_col]
             tc.eclapse()
 
         else:
@@ -876,7 +879,7 @@ class TrainDatasetLocationRSRB(Dataset):
             indeB = min((idx + 1) * self._step * self._maxK, dataLenB) - 1  # loc[a,b] = [a,b] close set!!
 
             list_col = list(self._df_comp_feat.columns)
-            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label','city']]
+            list_col = [col for col in list_col if col not in self._not_cols]
 
             datA = self._df_pair[self._df_pair['mk'] == 'A'].sort_values(
                 by=['city', 'atlas_location_uuid']).reset_index(drop=True)
@@ -893,12 +896,18 @@ class TrainDatasetLocationRSRB(Dataset):
             featB = datB.merge(self._df_comp_feat, on='duns_number', how='left', suffixes=['', '_right'])[list_col]
             featC = datC.merge(self._df_comp_feat, on='duns_number', how='left', suffixes=['', '_right'])[list_col]
 
+
+            list_col = list(self._df_loc_feat.columns)
+            list_col = [col for col in list_col if col not in self._not_cols]
+            featB_loc = datA.merge(self._df_loc_feat,on='atlas_location_uuid',how='left',suffixes=['','_right'])[list_col]
+
         # all branch need such operation...
         tc.start('Transfer storage')
-        featA, featB, featC = featA.to_numpy(), featB.to_numpy(), featC.to_numpy()
+        featA, featB, featC,featB_loc = featA.to_numpy(), featB.to_numpy(), featC.to_numpy(),featB_loc.to_numpy()
 
         featCompPos = torch.FloatTensor(featA)#B,D
         featRegion = torch.FloatTensor(featB)
+        featLoc = torch.FloatTensor(featB_loc)
         N, featdim = featRegion.shape
         # print(featA.shape,featB.shape,featC.shape)
         assert(N==featCompPos.shape[0]*self._maxK)
@@ -912,6 +921,7 @@ class TrainDatasetLocationRSRB(Dataset):
             "feat_comp_pos": featCompPos,
             "feat_comp_neg": featCompNeg,
             "feat_comp_region": featRegion,
+            "feat_loc":featLoc,
         }
 
 
@@ -924,23 +934,27 @@ def collate_TrainDatasetLocationRSRB(batch):
     feat_comp_pos = []
     feat_comp_neg = []
     feat_comp_region = []
+    feat_loc =[]
 
     for b in batch:
         feat_comp_pos.append(b['feat_comp_pos'])
         feat_comp_neg.append(b['feat_comp_neg'])
         feat_comp_region.append(b['feat_comp_region'])
+        feat_loc.append(b['feat_loc'])
 
     feat_comp_pos = torch.cat(feat_comp_pos, 0)
     feat_comp_neg = torch.cat(feat_comp_neg, 0)
     feat_comp_region = torch.cat(feat_comp_region, 0)
+    feat_loc = torch.cat(feat_loc,0)
     # print(feat_comp.shape,feat_loc.shape,labels.shape)
 
-    assert (feat_comp_pos.shape[0] == feat_comp_neg.shape[0] and feat_comp_region.shape[0] == feat_comp_pos.shape[0] )
+    assert (feat_comp_pos.shape[0] == feat_comp_neg.shape[0] and feat_comp_region.shape[0] == feat_comp_pos.shape[0] and feat_loc.shape[0]==feat_comp_pos.shape[0])
 
     return {
         "feat_comp_pos": feat_comp_pos,
         "feat_comp_neg": feat_comp_neg,
         "feat_comp_region": feat_comp_region,
+        "feat_loc":feat_loc,
     }
 
 

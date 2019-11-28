@@ -92,17 +92,17 @@ def main():
     print('num of valid pair %d'%len(df_valid_pair))
 
     df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'company_feat'+args.apps),index_col=0)
-    # df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat'+args.apps),index_col=0)
+    df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT,'location_feat'+args.apps),index_col=0)
 
     #Not used @this version...
     train_root = TR_DATA_ROOT
     valid_root = TT_DATA_ROOT
 
     ##::DataLoader
-    def make_loader(df_comp_feat: pd.DataFrame, df_pair: pd.DataFrame,trainStep=10000,
+    def make_loader(df_comp_feat: pd.DataFrame, df_loc_feat:pd.DataFrame ,df_pair: pd.DataFrame,trainStep=10000,
                     name='train', shuffle=True) -> DataLoader:
         return DataLoader(
-            TrainDatasetLocationRSRB(df_comp_feat=df_comp_feat, name = name ,df_pair=df_pair,citynum=args.citynum,trainStep=trainStep),
+            TrainDatasetLocationRSRB(df_comp_feat=df_comp_feat, df_loc_feat = df_loc_feat,name = name ,df_pair=df_pair,citynum=args.citynum,trainStep=trainStep),
             shuffle=shuffle,
             batch_size=args.batch_size,
             num_workers=args.workers,
@@ -247,13 +247,14 @@ def train(args, model: nn.Module, criterion, *, params,
                 featCompPos = batch_dat['feat_comp_pos']
                 featCompNeg = batch_dat['feat_comp_neg']
                 featRegion = batch_dat['feat_comp_region']
+                featLoc = batch_dat['feat_loc']
 
                 if use_cuda:
-                    featCompPos, featCompNeg, featRegion = featCompPos.cuda(), featCompNeg.cuda(),featRegion.cuda()
+                    featCompPos, featCompNeg, featRegion, featLoc = featCompPos.cuda(), featCompNeg.cuda(),featRegion.cuda(), featLoc.cuda()
 
                 # common_feat_comp, common_feat_loc, feat_comp_loc, outputs = model(feat_comp=featComp, feat_loc=featLoc)
-                model_output_pos = model(feat_comp=featCompPos, feat_K_comp=featRegion)
-                model_output_neg = model(feat_comp=featCompNeg, feat_K_comp=featRegion)
+                model_output_pos = model(feat_comp=featCompPos, feat_K_comp=featRegion, feat_loc=featLoc)
+                model_output_neg = model(feat_comp=featCompNeg, feat_K_comp=featRegion, feat_loc=featLoc)
 
                 # outputs = torch.cat( [ model_output_pos['outputs'], model_output_neg['outputs'] ], dim = 0)
 
@@ -327,13 +328,14 @@ def validation(
             featCompPos = batch_dat['feat_comp_pos']
             featCompNeg = batch_dat['feat_comp_neg']
             featRegion = batch_dat['feat_comp_region']
+            featLoc = batch_dat['feat_loc']
 
             if use_cuda:
-                featCompPos, featCompNeg, featRegion = featCompPos.cuda(), featCompNeg.cuda(), featRegion.cuda()
+                featCompPos, featCompNeg, featRegion, featLoc = featCompPos.cuda(), featCompNeg.cuda(), featRegion.cuda(), featLoc.cuda()
 
             # common_feat_comp, common_feat_loc, feat_comp_loc, outputs = model(feat_comp=featComp, feat_loc=featLoc)
-            model_output_pos = model(feat_comp=featCompPos, feat_K_comp=featRegion)
-            model_output_neg = model(feat_comp=featCompNeg, feat_K_comp=featRegion)
+            model_output_pos = model(feat_comp=featCompPos, feat_K_comp=featRegion, feat_loc=featLoc)
+            model_output_neg = model(feat_comp=featCompNeg, feat_K_comp=featRegion, feat_loc=featLoc)
 
             outputs = torch.cat([model_output_pos['outputs'], model_output_neg['outputs']], dim=0)
 

@@ -166,6 +166,63 @@ class RegionModelv1(nn.Module):
             'outputs':outputs
         }
 
+
+class RegionModelv2(nn.Module):
+    """
+
+    """
+
+    def __init__(self, feat_comp_dim=102,feat_loc_dim=23):
+        super().__init__()
+        self.emb_feat_comp_dim = 64
+        self.feat_region_dim = 32
+        self.emb_feat_loc_dim = 32
+        self._feat_comp_dim = feat_comp_dim
+        self._feat_loc_dim = feat_loc_dim
+
+        self.netEmb = companyMLP(fid=feat_comp_dim, fod=self.emb_feat_comp_dim)
+
+        self.netLoc = nn.Sequential(
+            nn.Linear(feat_loc_dim,64),
+            nn.LeakyReLU(),
+            nn.Linear(64,self.emb_feat_loc_dim),
+            nn.LeakyReLU(),
+        )
+
+        self.netReg = setLinearLayerConv1d(fin=self.emb_feat_comp_dim, fout=self.feat_region_dim)
+
+        self.netSng = nn.Sequential(
+            nn.Linear(in_features=self.emb_feat_comp_dim, out_features=self.feat_region_dim),
+            nn.LeakyReLU()
+        )
+
+        feat_cls_dim = 32
+
+        self.netClf = nn.Sequential(
+            nn.Linear(in_features=self.feat_region_dim + self.feat_region_dim+self.emb_feat_loc_dim, out_features=feat_cls_dim),
+            nn.LeakyReLU(),
+            nn.Linear(in_features=feat_cls_dim, out_features=2)
+        )
+
+    def forward(self, feat_comp, feat_K_comp,feat_loc):
+        emb_feat_comp = self.netEmb(feat_comp)
+        emb_feat_K_comp = self.netEmb(feat_K_comp)
+
+        single_feat_comp = self.netSng(emb_feat_comp)
+        region_feat_comp = self.netReg(feat_set=emb_feat_K_comp, type='maxpooling')
+
+        emb_feat_loc = self.netLoc(feat_loc)
+
+        concat_feat = torch.cat([single_feat_comp, region_feat_comp, emb_feat_loc ], dim=1)
+        outputs = self.netClf(concat_feat)
+
+        return {
+            'feat_comp': emb_feat_comp,
+            'feat_region': region_feat_comp,
+            'outputs': outputs
+        }
+
+
 # ===================================================================================================
 # ===================================================================================================
 # Location Recommendation Model
@@ -539,4 +596,5 @@ location_recommend_model_v5 = partial(NaiveDLCosineLosswKemb)
 location_recommend_model_v6 = partial(NaiveDeepWide) #They use similar structure
 
 location_recommend_region_model_v1 = partial(RegionModelv1)
+location_recommend_region_model_v2 = partial(RegionModelv2)
 
