@@ -15,6 +15,7 @@ from aug import *
 from transforms import iaaTransform
 import math
 from udf.basic import timer
+
 # image_size = 256
 
 iaa_transformer = iaaTransform()
@@ -531,7 +532,7 @@ class TrainDatasetLocationRS(Dataset):
                  df_loc_feat: pd.DataFrame,
                  df_pair: pd.DataFrame,
                  df_ensemble_score, flag_ensemble: bool,
-                 emb_dict: dict,citynum=5,
+                 emb_dict: dict, citynum=5,
                  name: str = 'train', posN=100, negN=200, testStep=500000):
         super().__init__()
         self._df_comp_feat = df_comp_feat.fillna(0)
@@ -604,12 +605,12 @@ class TrainDatasetLocationRS(Dataset):
         # concate training pair with location/company feature
         F_res_dat = pd.merge(res_dat, self._df_comp_feat, on='duns_number', how='left')
         list_col = list(self._df_comp_feat.columns)
-        list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label','city']]
+        list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label', 'city']]
         FeatComp = F_res_dat[list_col].to_numpy()
 
         F_res_dat = pd.merge(res_dat, self._df_loc_feat, on='atlas_location_uuid', how='left')
         list_col = list(self._df_loc_feat.columns)
-        list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label','city']]
+        list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label', 'city']]
         # print(list_col)
         FeatLoc = F_res_dat[list_col].to_numpy()
 
@@ -617,7 +618,7 @@ class TrainDatasetLocationRS(Dataset):
             F_res_dat = pd.merge(res_dat, self._df_ensemble_score, on=['atlas_location_uuid', 'duns_number'],
                                  how='left')
             list_col = list(self._df_ensemble_score.columns)
-            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label','city']]
+            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label', 'city']]
             # print(list_col)
             FeatEnsembleScore = F_res_dat[list_col].to_numpy()
         else:
@@ -707,16 +708,18 @@ class TrainDatasetLocationRSRB(Dataset):
         self.cldat = []
         self.locname = []
         self.df_comp_feat_city = []
-        if name in ['train','train_fast']:
+        if name in ['train', 'train_fast']:
             for ind_city in range(citynum):
                 self.cldat.append(self._df_pair[(self._df_pair['fold'] == 0) & (self._df_pair['city'] == ind_city)])
-                self.locname.append(self.cldat[ind_city].groupby('atlas_location_uuid').head(1).reset_index(drop=True)[['atlas_location_uuid']])
-                self.df_comp_feat_city.append(self._df_comp_feat[self._df_comp_feat['city']==ind_city].reset_index(drop=True))
+                self.locname.append(self.cldat[ind_city].groupby('atlas_location_uuid').head(1).reset_index(drop=True)[
+                                        ['atlas_location_uuid']])
+                self.df_comp_feat_city.append(
+                    self._df_comp_feat[self._df_comp_feat['city'] == ind_city].reset_index(drop=True))
         self._debug = False
-        self._not_cols = ['duns_number', 'atlas_location_uuid', 'label','city']
+        self._not_cols = ['duns_number', 'atlas_location_uuid', 'label', 'city']
 
     def __len__(self):
-        if self._name in ['train','train_fast']:
+        if self._name in ['train', 'train_fast']:
             return self._traintimes
         else:
             return math.ceil(len(self._df_pair) / self._step)  # len of pair
@@ -805,7 +808,7 @@ class TrainDatasetLocationRSRB(Dataset):
             num_pos = 50  # each building
             num_region = self._maxK
 
-            data_batch = num_pos + num_pos*num_region
+            data_batch = num_pos + num_pos * num_region
             num_pos_pair = num_pos * num_building_batch
             # num_neg_pair = 2*num_pos_pair
 
@@ -827,7 +830,7 @@ class TrainDatasetLocationRSRB(Dataset):
             tbABGrp = tbAB.groupby('atlas_location_uuid')
             tbA = tbABGrp.head(num_pos).reset_index(drop=True)
 
-            tbB = tbABGrp.tail(num_pos*num_region).reset_index(drop=True)
+            tbB = tbABGrp.tail(num_pos * num_region).reset_index(drop=True)
             tc.eclapse()
 
             assert (len(tbA) == num_pos_pair)
@@ -837,10 +840,11 @@ class TrainDatasetLocationRSRB(Dataset):
                 pd.concat([smp_loc_name,
                            smp_loc_name.sample(frac=1, replace=True).reset_index(drop=True) \
                           .rename(columns={'atlas_location_uuid': 'atlas_location_uuid_neg'})], axis=1)
-            tbC = tbA \
-                .merge(smp_loc_name_pair,
-                       on='atlas_location_uuid', how='inner', suffixes=['', '_right']) \
-                [['duns_number', 'atlas_location_uuid', 'atlas_location_uuid_neg']].reset_index(drop=True)
+
+            tbC = \
+            smp_loc_name_pair.merge(tbA, left_on='atlas_location_uuid_neg', right_on='atlas_location_uuid', how='inner',
+                                    suffixes=['', '_useless'])[
+                ['duns_number', 'atlas_location_uuid', 'atlas_location_uuid_neg']].reset_index(drop=True)
             tc.eclapse()
 
             tc.start('sort')
@@ -854,18 +858,21 @@ class TrainDatasetLocationRSRB(Dataset):
 
             tc.start('merge')
             tbACB = pd.concat([tbA, tbC, tbB], axis=0, sort=False).reset_index(drop=True)
-            featACB_comp = tbACB.merge(self.df_comp_feat_city[ind_city], on='duns_number', how='left', suffixes=['', '_right'])[list_col]
+            featACB_comp = \
+            tbACB.merge(self.df_comp_feat_city[ind_city], on='duns_number', how='left', suffixes=['', '_right'])[
+                list_col]
 
             featA = featACB_comp.loc[:num_pos_pair - 1]
             featC = featACB_comp.loc[num_pos_pair:2 * num_pos_pair - 1]
             featB = featACB_comp.loc[2 * num_pos_pair:]
 
-            assert(len(featC)==len(featA))
+            assert (len(featC) == len(featA))
 
             list_col = list(self._df_loc_feat.columns)
             list_col = [col for col in list_col if col not in self._not_cols]
             # tbA and tbB share the same location, thus tbA is used.
-            featB_loc = tbA.merge(self._df_loc_feat,on='atlas_location_uuid',how='left',suffixes=['','_right'])[list_col]
+            featB_loc = tbA.merge(self._df_loc_feat, on='atlas_location_uuid', how='left', suffixes=['', '_right'])[
+                list_col]
             tc.eclapse()
 
         else:
@@ -888,40 +895,40 @@ class TrainDatasetLocationRSRB(Dataset):
             datC = self._df_pair[self._df_pair['mk'] == 'C'].sort_values(
                 by=['city', 'atlas_location_uuid']).reset_index(drop=True)
 
-            datA = datA.loc[inds:inde, ['duns_number', 'atlas_location_uuid','city','mk']]
-            datB = datB.loc[indsB:indeB, ['duns_number', 'atlas_location_uuid','city','mk']]
+            datA = datA.loc[inds:inde, ['duns_number', 'atlas_location_uuid', 'city', 'mk']]
+            datB = datB.loc[indsB:indeB, ['duns_number', 'atlas_location_uuid', 'city', 'mk']]
             datC = datC.loc[inds:inde, ['duns_number', 'atlas_location_uuid', 'city', 'mk']]
 
-            featA = datA.merge(self._df_comp_feat,on='duns_number',how='left',suffixes=['','_right'])[list_col]
+            featA = datA.merge(self._df_comp_feat, on='duns_number', how='left', suffixes=['', '_right'])[list_col]
             featB = datB.merge(self._df_comp_feat, on='duns_number', how='left', suffixes=['', '_right'])[list_col]
             featC = datC.merge(self._df_comp_feat, on='duns_number', how='left', suffixes=['', '_right'])[list_col]
 
-
             list_col = list(self._df_loc_feat.columns)
             list_col = [col for col in list_col if col not in self._not_cols]
-            featB_loc = datA.merge(self._df_loc_feat,on='atlas_location_uuid',how='left',suffixes=['','_right'])[list_col]
+            featB_loc = datA.merge(self._df_loc_feat, on='atlas_location_uuid', how='left', suffixes=['', '_right'])[
+                list_col]
 
         # all branch need such operation...
         tc.start('Transfer storage')
-        featA, featB, featC,featB_loc = featA.to_numpy(), featB.to_numpy(), featC.to_numpy(),featB_loc.to_numpy()
+        featA, featB, featC, featB_loc = featA.to_numpy(), featB.to_numpy(), featC.to_numpy(), featB_loc.to_numpy()
 
-        featCompPos = torch.FloatTensor(featA)#B,D
+        featCompPos = torch.FloatTensor(featA)  # B,D
         featRegion = torch.FloatTensor(featB)
         featLoc = torch.FloatTensor(featB_loc)
         N, featdim = featRegion.shape
         # print(featA.shape,featB.shape,featC.shape)
-        assert(N==featCompPos.shape[0]*self._maxK)
+        assert (N == featCompPos.shape[0] * self._maxK)
 
-        featRegion = featRegion.view(-1, self._maxK, featdim)#B,K,D
+        featRegion = featRegion.view(-1, self._maxK, featdim)  # B,K,D
 
-        featCompNeg = torch.FloatTensor(featC)#B,D
+        featCompNeg = torch.FloatTensor(featC)  # B,D
         tc.eclapse()
 
         return {
             "feat_comp_pos": featCompPos,
             "feat_comp_neg": featCompNeg,
             "feat_comp_region": featRegion,
-            "feat_loc":featLoc,
+            "feat_loc": featLoc,
         }
 
 
@@ -934,7 +941,7 @@ def collate_TrainDatasetLocationRSRB(batch):
     feat_comp_pos = []
     feat_comp_neg = []
     feat_comp_region = []
-    feat_loc =[]
+    feat_loc = []
 
     for b in batch:
         feat_comp_pos.append(b['feat_comp_pos'])
@@ -945,16 +952,17 @@ def collate_TrainDatasetLocationRSRB(batch):
     feat_comp_pos = torch.cat(feat_comp_pos, 0)
     feat_comp_neg = torch.cat(feat_comp_neg, 0)
     feat_comp_region = torch.cat(feat_comp_region, 0)
-    feat_loc = torch.cat(feat_loc,0)
+    feat_loc = torch.cat(feat_loc, 0)
     # print(feat_comp.shape,feat_loc.shape,labels.shape)
 
-    assert (feat_comp_pos.shape[0] == feat_comp_neg.shape[0] and feat_comp_region.shape[0] == feat_comp_pos.shape[0] and feat_loc.shape[0]==feat_comp_pos.shape[0])
+    assert (feat_comp_pos.shape[0] == feat_comp_neg.shape[0] and feat_comp_region.shape[0] == feat_comp_pos.shape[0] and
+            feat_loc.shape[0] == feat_comp_pos.shape[0])
 
     return {
         "feat_comp_pos": feat_comp_pos,
         "feat_comp_neg": feat_comp_neg,
         "feat_comp_region": feat_comp_region,
-        "feat_loc":feat_loc,
+        "feat_loc": feat_loc,
     }
 
 

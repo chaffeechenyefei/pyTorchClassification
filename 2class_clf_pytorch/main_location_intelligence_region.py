@@ -162,7 +162,7 @@ def main():
         """
         """
         valid_loader = make_loader(df_comp_feat=df_comp_feat, df_pair=df_valid_pair, name='valid',shuffle=False)
-        validation( model, criterion, tqdm.tqdm(valid_loader, desc='Validation'), use_cuda=use_cuda, lossType=lossType )
+        validation( args , model, criterion, tqdm.tqdm(valid_loader, desc='Validation'), use_cuda=use_cuda, lossType=lossType )
 
 
 
@@ -253,8 +253,12 @@ def train(args, model: nn.Module, criterion, *, params,
                     featCompPos, featCompNeg, featRegion, featLoc = featCompPos.cuda(), featCompNeg.cuda(),featRegion.cuda(), featLoc.cuda()
 
                 # common_feat_comp, common_feat_loc, feat_comp_loc, outputs = model(feat_comp=featComp, feat_loc=featLoc)
-                model_output_pos = model(feat_comp=featCompPos, feat_K_comp=featRegion, feat_loc=featLoc)
-                model_output_neg = model(feat_comp=featCompNeg, feat_K_comp=featRegion, feat_loc=featLoc)
+                if args.model == 'location_recommend_region_model_v1':
+                    model_output_pos = model(feat_comp=featCompPos, feat_K_comp=featRegion)
+                    model_output_neg = model(feat_comp=featCompNeg, feat_K_comp=featRegion)
+                else:
+                    model_output_pos = model(feat_comp=featCompPos, feat_K_comp=featRegion, feat_loc=featLoc)
+                    model_output_neg = model(feat_comp=featCompNeg, feat_K_comp=featRegion, feat_loc=featLoc)
 
                 # outputs = torch.cat( [ model_output_pos['outputs'], model_output_neg['outputs'] ], dim = 0)
 
@@ -270,7 +274,7 @@ def train(args, model: nn.Module, criterion, *, params,
 
                 lossP = softmax_loss(model_output_pos['outputs'], target_pos)
                 lossN = softmax_loss(model_output_neg['outputs'], target_neg)
-                loss = lossP + lossN
+                loss = lossP + 0.8*lossN
                 lossType = 'softmax'
 
                 batch_size = nP+nN
@@ -293,7 +297,7 @@ def train(args, model: nn.Module, criterion, *, params,
             print('saving')
             save(epoch + 1)
             print('validation')
-            valid_metrics = validation(model, criterion, valid_loader, use_cuda, lossType=lossType)
+            valid_metrics = validation(args ,model, criterion, valid_loader, use_cuda, lossType=lossType)
             write_event(log, step, **valid_metrics)
             valid_loss = valid_metrics['valid_loss']
             valid_top1 = valid_metrics['valid_top1']
@@ -320,7 +324,7 @@ def train(args, model: nn.Module, criterion, *, params,
 #validation
 #=============================================================================================================================
 def validation(
-        model: nn.Module, criterion, valid_loader, use_cuda, lossType='softmax') -> Dict[str, float]:
+        args , model: nn.Module, criterion, valid_loader, use_cuda, lossType='softmax') -> Dict[str, float]:
     model.eval()
     all_losses, all_predictions, all_targets = [], [], []
     with torch.no_grad():
@@ -334,8 +338,12 @@ def validation(
                 featCompPos, featCompNeg, featRegion, featLoc = featCompPos.cuda(), featCompNeg.cuda(), featRegion.cuda(), featLoc.cuda()
 
             # common_feat_comp, common_feat_loc, feat_comp_loc, outputs = model(feat_comp=featComp, feat_loc=featLoc)
-            model_output_pos = model(feat_comp=featCompPos, feat_K_comp=featRegion, feat_loc=featLoc)
-            model_output_neg = model(feat_comp=featCompNeg, feat_K_comp=featRegion, feat_loc=featLoc)
+            if args.model == 'location_recommend_region_model_v1':
+                model_output_pos = model(feat_comp=featCompPos, feat_K_comp=featRegion)
+                model_output_neg = model(feat_comp=featCompNeg, feat_K_comp=featRegion)
+            else:
+                model_output_pos = model(feat_comp=featCompPos, feat_K_comp=featRegion, feat_loc=featLoc)
+                model_output_neg = model(feat_comp=featCompNeg, feat_K_comp=featRegion, feat_loc=featLoc)
 
             outputs = torch.cat([model_output_pos['outputs'], model_output_neg['outputs']], dim=0)
 
