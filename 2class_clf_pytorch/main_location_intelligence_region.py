@@ -142,8 +142,8 @@ def main():
         Path(str(run_root) + '/params.json').write_text(
             json.dumps(vars(args), indent=4, sort_keys=True))
 
-        train_loader = make_loader(df_comp_feat=df_comp_feat, df_pair=df_train_pair, name='train_fast',trainStep=args.trainStep)
-        valid_loader = make_loader(df_comp_feat=df_comp_feat, df_pair=df_valid_pair, name='valid',shuffle=False)
+        train_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat= df_loc_feat, df_pair=df_train_pair, name='train_fast',trainStep=args.trainStep)
+        valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat= df_loc_feat,  df_pair=df_valid_pair, name='valid',shuffle=False)
 
         train_kwargs = dict(
             args=args,
