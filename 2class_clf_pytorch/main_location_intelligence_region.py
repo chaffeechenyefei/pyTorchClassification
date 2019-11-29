@@ -161,7 +161,7 @@ def main():
     elif args.mode == 'validate':
         """
         """
-        valid_loader = make_loader(df_comp_feat=df_comp_feat, df_pair=df_valid_pair, name='valid',shuffle=False)
+        valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat= df_loc_feat,  df_pair=df_valid_pair, name='valid',shuffle=False)
         validation( args , model, criterion, tqdm.tqdm(valid_loader, desc='Validation'), use_cuda=use_cuda, lossType=lossType )
 
 
