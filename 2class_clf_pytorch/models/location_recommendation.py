@@ -258,6 +258,28 @@ class RegionModelv3(nn.Module):
             'feat_region_deep': region_feat_comp,
             'outputs': outputs
         }
+
+class NaiveLR(nn.Module):
+    """
+    no embedding, no region modeling
+    """
+    def __init__(self,feat_comp_dim=102,feat_loc_dim=23):
+        super().__init__()
+        self.netClf = nn.Sequential(
+            nn.Linear(in_features= feat_comp_dim + feat_loc_dim, out_features=64),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.1),
+            nn.Linear(in_features=64, out_features=2)
+        )
+
+    def forward(self,feat_comp,feat_loc):
+        feat_wide = torch.cat([feat_comp, feat_loc], dim=1)
+        outputs = self.netClf(feat_wide)
+
+        return {
+            'outputs': outputs
+        }
+
 # ===================================================================================================
 # ===================================================================================================
 # Location Recommendation Model
@@ -633,4 +655,5 @@ location_recommend_model_v6 = partial(NaiveDeepWide) #They use similar structure
 location_recommend_region_model_v1 = partial(RegionModelv1)
 location_recommend_region_model_v2 = partial(RegionModelv2)
 location_recommend_region_model_v3 = partial(RegionModelv3)
+location_recommend_region_model_v0 = partial(NaiveLR)
 

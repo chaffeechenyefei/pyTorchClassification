@@ -256,6 +256,9 @@ def train(args, model: nn.Module, criterion, *, params,
                 if args.model == 'location_recommend_region_model_v1':
                     model_output_pos = model(feat_comp=featCompPos, feat_K_comp=featRegion)
                     model_output_neg = model(feat_comp=featCompNeg, feat_K_comp=featRegion)
+                elif args.model == 'location_recommend_region_model_v0':
+                    model_output_pos = model(feat_comp=featCompPos, feat_loc=featLoc)
+                    model_output_neg = model(feat_comp=featCompPos, feat_loc=featLoc)
                 else:
                     model_output_pos = model(feat_comp=featCompPos, feat_K_comp=featRegion, feat_loc=featLoc)
                     model_output_neg = model(feat_comp=featCompNeg, feat_K_comp=featRegion, feat_loc=featLoc)
@@ -341,6 +344,9 @@ def validation(
             if args.model == 'location_recommend_region_model_v1':
                 model_output_pos = model(feat_comp=featCompPos, feat_K_comp=featRegion)
                 model_output_neg = model(feat_comp=featCompNeg, feat_K_comp=featRegion)
+            elif args.model == 'location_recommend_region_model_v0':
+                model_output_pos = model(feat_comp=featCompPos, feat_loc=featLoc)
+                model_output_neg = model(feat_comp=featCompPos, feat_loc=featLoc)
             else:
                 model_output_pos = model(feat_comp=featCompPos, feat_K_comp=featRegion, feat_loc=featLoc)
                 model_output_neg = model(feat_comp=featCompNeg, feat_K_comp=featRegion, feat_loc=featLoc)
