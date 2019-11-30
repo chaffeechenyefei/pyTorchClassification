@@ -545,6 +545,7 @@ class TrainDatasetLocationRS(Dataset):
         self._step = testStep
         self._emb_dict = emb_dict
         self._flag_ensemble = flag_ensemble
+        self._not_cols = ['duns_number', 'atlas_location_uuid', 'label', 'city']
 
     def __len__(self):
         if self._name == 'train':
@@ -605,12 +606,12 @@ class TrainDatasetLocationRS(Dataset):
         # concate training pair with location/company feature
         F_res_dat = pd.merge(res_dat, self._df_comp_feat, on='duns_number', how='left')
         list_col = list(self._df_comp_feat.columns)
-        list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label', 'city']]
+        list_col = [col for col in list_col if col not in self._not_cols]
         FeatComp = F_res_dat[list_col].to_numpy()
 
         F_res_dat = pd.merge(res_dat, self._df_loc_feat, on='atlas_location_uuid', how='left')
         list_col = list(self._df_loc_feat.columns)
-        list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label', 'city']]
+        list_col = [col for col in list_col if col not in self._not_cols]
         # print(list_col)
         FeatLoc = F_res_dat[list_col].to_numpy()
 
@@ -618,7 +619,7 @@ class TrainDatasetLocationRS(Dataset):
             F_res_dat = pd.merge(res_dat, self._df_ensemble_score, on=['atlas_location_uuid', 'duns_number'],
                                  how='left')
             list_col = list(self._df_ensemble_score.columns)
-            list_col = [col for col in list_col if col not in ['duns_number', 'atlas_location_uuid', 'label', 'city']]
+            list_col = [col for col in list_col if col not in self._not_cols]
             # print(list_col)
             FeatEnsembleScore = F_res_dat[list_col].to_numpy()
         else:

@@ -266,10 +266,7 @@ class NaiveLR(nn.Module):
     def __init__(self,feat_comp_dim=102,feat_loc_dim=23):
         super().__init__()
         self.netClf = nn.Sequential(
-            nn.Linear(in_features= feat_comp_dim + feat_loc_dim, out_features=64),
-            nn.LeakyReLU(),
-            nn.Dropout(p=0.1),
-            nn.Linear(in_features=64, out_features=2)
+            nn.Linear(in_features= feat_comp_dim + feat_loc_dim, out_features=2),
         )
 
     def forward(self,feat_comp,feat_loc):
