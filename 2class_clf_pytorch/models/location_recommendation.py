@@ -259,6 +259,49 @@ class RegionModelv3(nn.Module):
             'outputs': outputs
         }
 
+class RegionModelv4(nn.Module):
+    """
+    location id embedding is replaced by region model
+    others remain same as Deep and Wide
+    additional loss based on the idea that embedded vector should contain infor abt the location itself
+    """
+    def __init__(self, feat_comp_dim=102,feat_loc_dim=23):
+        super().__init__()
+        self.emb_feat_comp_dim = 64
+        self.feat_region_dim = 64
+
+        self.netEmb = companyMLP(fid=feat_comp_dim, fod=self.emb_feat_comp_dim)
+        self.netReg = setLinearLayerConv1d(fin=self.emb_feat_comp_dim, fout=self.feat_region_dim)
+        self.netDeep = nn.Sequential(
+            nn.Linear(in_features=self.feat_region_dim,out_features=self.feat_region_dim),
+            nn.LeakyReLU()
+        )
+        self.netDecoder = nn.Sequential(
+            nn.Linear(in_features=self.feat_region_dim,out_features=feat_loc_dim),
+        )
+
+        self.netClf = nn.Sequential(
+            nn.Linear(in_features=self.feat_region_dim + feat_comp_dim + feat_loc_dim, out_features=64),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.1),
+            nn.Linear(in_features=64, out_features=2)
+        )
+
+    def forward(self,feat_comp, feat_K_comp,feat_loc):
+        emb_feat_K_comp = self.netEmb(feat_K_comp)
+        region_feat_comp_org = self.netReg(feat_set=emb_feat_K_comp, type='maxpooling')
+        explicit_feat_loc = self.netDecoder(region_feat_comp_org)
+        region_feat_comp = self.netDeep(region_feat_comp_org)
+        feat_deep_and_wide = torch.cat([feat_comp,feat_loc,region_feat_comp], dim=1)
+        outputs = self.netClf(feat_deep_and_wide)
+        return {
+            'feat_region_org': region_feat_comp_org,
+            'feat_region_deep': region_feat_comp,
+            'feat_loc_pred': explicit_feat_loc,
+            'outputs': outputs
+        }
+
+
 class NaiveLR(nn.Module):
     """
     no embedding, no region modeling
@@ -652,5 +695,6 @@ location_recommend_model_v6 = partial(NaiveDeepWide) #They use similar structure
 location_recommend_region_model_v1 = partial(RegionModelv1)
 location_recommend_region_model_v2 = partial(RegionModelv2)
 location_recommend_region_model_v3 = partial(RegionModelv3)
+location_recommend_region_model_v4 = partial(RegionModelv4)
 location_recommend_region_model_v0 = partial(NaiveLR)
 

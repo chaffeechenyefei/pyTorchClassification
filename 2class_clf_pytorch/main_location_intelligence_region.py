@@ -278,6 +278,12 @@ def train(args, model: nn.Module, criterion, *, params,
                 lossP = softmax_loss(model_output_pos['outputs'], target_pos)
                 lossN = softmax_loss(model_output_neg['outputs'], target_neg)
                 loss = lossP + 0.8*lossN
+
+                if args.model == 'location_recommend_region_model_v4':
+                    lW = 0.3
+                    loss2 = l2_loss(model_output_pos['feat_loc_pred'],featLoc) #Neg Pos share the same location
+                    loss = (1-lW)*loss + lW*loss2
+
                 lossType = 'softmax'
 
                 batch_size = nP+nN
@@ -408,6 +414,13 @@ def _reduce_loss(loss):
 def softmax_loss(results, labels):
     labels = labels.view(-1)
     loss = F.cross_entropy(results, labels, reduce=True)
+
+    return loss
+
+def l2_loss(results,targets):
+    diff = results - targets
+    loss = torch.sum(diff**2,dim=1,keepdim=True)
+    loss = loss.mean()
 
     return loss
 
