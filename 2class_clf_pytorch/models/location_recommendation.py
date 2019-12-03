@@ -292,8 +292,13 @@ class RegionModelv4(nn.Module):
         region_feat_comp_org = self.netReg(feat_set=emb_feat_K_comp, type='maxpooling')
         explicit_feat_loc = self.netDecoder(region_feat_comp_org)
         region_feat_comp = self.netDeep(region_feat_comp_org)
-        feat_deep_and_wide = torch.cat([feat_comp,feat_loc,region_feat_comp], dim=1)
-        outputs = self.netClf(feat_deep_and_wide)
+        if feat_comp is not None and feat_loc is not None:
+            feat_deep_and_wide = torch.cat([feat_comp,feat_loc,region_feat_comp], dim=1)
+            outputs = self.netClf(feat_deep_and_wide)
+        else:
+            outputs = torch.zeros(feat_K_comp.shape[0],2)
+            if use_cuda:
+                outputs = outputs.cuda()
         return {
             'feat_region_org': region_feat_comp_org,
             'feat_region_deep': region_feat_comp,
