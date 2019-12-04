@@ -471,21 +471,7 @@ def predict(
         sample_pd = res_pd.groupby('atlas_location_uuid').apply(lambda x: x.nlargest(topk,['similarity'])).reset_index(drop=True)
         sample_pd.to_csv('sampled_' + pre_name + save_name )
     print('saving total data...')
-    #20191118 only sampling
-    # res_pd.to_csv(pre_name+save_name)
-    #
-    #
-    #
-    #
-    # all_targets =all_targets.data.cpu().numpy()
-    #
-    # # save_obj(all_targets,'all_targets')
-    # # save_obj(all_predictions2,'all_predictions2')
-    #
-    # print('calculating roc')
-    # fpr, tpr, roc_thresholds = roc_curve(all_targets, all_predictions2)
-    #
-    # roc_auc = auc(fpr,tpr)
+
     roc_auc = 0
 
     metrics = {}

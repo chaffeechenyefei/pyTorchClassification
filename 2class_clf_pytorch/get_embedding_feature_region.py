@@ -95,6 +95,7 @@ def main():
 
         featRegion = tbB[list_col].to_numpy()
         tbBLoc = tbB[['atlas_location_uuid']]
+        tbBLoc = tbBLoc.loc[::args.maxK,:]
 
         featRegion = torch.FloatTensor(featRegion)
 
@@ -114,14 +115,17 @@ def main():
 
         emb_vecs_all.append(emb_vecs)
         locName.append(tbBLoc)
+        assert(emb_vecs.shape[0]==len(tbBLoc))
 
     emb_vecs = torch.cat(emb_vecs_all,dim=0)
-    locName = pd.concat(locName,axis=0)
+    locName = pd.concat(locName,axis=0).reset_index(drop=True)
 
     emb_vecs = emb_vecs.data.cpu().numpy()
 
     feat_cols = ['feat#' + str(c) for c in range(feat_dim)]
     feat_dat = pd.DataFrame(emb_vecs, columns=feat_cols)
+
+    assert(len(locName)==len(feat_dat))
 
 
     loc_dat = pd.concat([locName, feat_dat], axis=1)
