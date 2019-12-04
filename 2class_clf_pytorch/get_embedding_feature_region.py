@@ -82,6 +82,7 @@ def main():
     locName = []
 
     for ind_city, filename in enumerate(clfile):
+        print('prcessing city %s'%filename)
         cldat = pd.read_csv(pjoin(datapath, filename))
         cldat['city'] = ind_city
 
@@ -96,6 +97,9 @@ def main():
         tbBLoc = tbB[['atlas_location_uuid']]
 
         featRegion = torch.FloatTensor(featRegion)
+
+        if use_cuda:
+            featRegion = featRegion.cuda()
 
         N, featdim = featRegion.shape
 
