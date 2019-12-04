@@ -40,8 +40,9 @@ def main():
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
     arg('--mode', choices=['input_grad'], default='input_grad')
-    arg('--run_root', default='result/location_recommend_model_v6_5city_191113')
-    arg('--model', default='location_RSRBv4_191114')
+    arg('--run_root', default='result/location_RSRBv4_191114/')
+    arg('--path',default='/Users/yefeichen/Database/location_recommender_system/')
+    arg('--model', default='location_recommend_region_model_v4')
     arg('--ckpt', type=str, default='model_loss_best.pt')
     arg('--maxK',type=int,default=50)
     arg('--apps',type=str,default='_191114.csv')
@@ -53,9 +54,10 @@ def main():
     args = parser.parse_args()
     #run_root: model/weights root
     run_root = Path(args.run_root)
+    datapath = args.path
 
     # df_loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT, 'location_feat' + args.apps), index_col=0)
-    df_comp_feat = pd.read_csv(pjoin(TR_DATA_ROOT, 'location_feat' + args.apps), index_col=0)
+    df_comp_feat = pd.read_csv(pjoin(datapath, 'company_feat' + args.apps), index_col=0)
     citynameabbr = ['PA', 'SF', 'SJ', 'LA', 'NY']
     clfile = [c + args.apps for c in citynameabbr]
 
@@ -80,7 +82,7 @@ def main():
     locName = []
 
     for ind_city, filename in enumerate(clfile):
-        cldat = pd.read_csv(pjoin(run_root, filename))
+        cldat = pd.read_csv(pjoin(datapath, filename))
         cldat['city'] = ind_city
 
         fn = lambda obj: obj.loc[np.random.choice(obj.index, args.maxK, True), :]
@@ -119,7 +121,7 @@ def main():
 
 
     loc_dat = pd.concat([locName, feat_dat], axis=1)
-    loc_dat.to_csv('location_feat_emb.csv')
+    loc_dat.to_csv('location_feat_emb_'+args.model+'.csv')
 
 
 
