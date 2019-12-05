@@ -58,7 +58,7 @@ def main():
     #cmd and arg parser
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
-    arg('--mode', choices=['train', 'validate', 'predict_valid', 'predict_test','train_test', 'predict_sub'], default='train')
+    arg('--mode', choices=['train', 'validate', 'predict_valid', 'predict_test','train_test', 'predict_sub','predict_salesforce'], default='train')
     arg('--run_root', default='result/location_company')
     arg('--fold', type=int, default=0)
     arg('--model', default='location_recommend_model_v3')
@@ -103,6 +103,7 @@ def main():
 
     clfile = ['PA', 'SF', 'SJ', 'LA', 'NY']
     cityname = ['Palo Alto', 'San Francisco', 'San Jose', 'Los Angeles', 'New York']
+    c_salesforce_file = 'salesforce_comp_city_from_opp.csv'
     cfile = ['dnb_pa.csv', 'dnb_sf.csv', 'dnb_sj.csv', 'dnb_Los_Angeles.csv', 'dnb_New_York.csv']
     lfile = 'location_scorecard_191113.csv'
 
@@ -402,6 +403,55 @@ def main():
             predict(model,criterion,tqdm.tqdm(valid_loader, desc='Validation'),
                     use_cuda=use_cuda,test_pair=testing_pair[['atlas_location_uuid', 'duns_number']], pre_name=pre_name,\
                     save_name= pred_save_name[ind_city] , lossType=lossType)
+
+    elif args.mode == 'predict_salesforce':
+        """
+        It will generate a score for each company with all the locations(including companies/locations in training set)
+        or locations of ww only
+        """
+        pdc_all = pd.read_csv(pjoin(TR_DATA_ROOT, c_salesforce_file))[['duns_number','city']]
+        for ind_city,str_city in enumerate(cityname):
+            pdcl = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
+            pdc = pdc_all[pdc_all['city']==str_city]
+            print('Total %d company found from salesforce'%len(pdc))
+            pdc['atlas_location_uuid'] = 'a'
+            # in case of multi-mapping
+            # pdcl = pdcl.groupby('atlas_location_uuid').first().reset_index()
+            all_loc_name = pdcl[['atlas_location_uuid']].groupby(['atlas_location_uuid'])[
+                ['atlas_location_uuid']].first().reset_index(drop=True)
+
+            if wework_location_only:
+                loc_feat = pd.read_csv(pjoin(TR_DATA_ROOT, lfile))[['atlas_location_uuid', 'is_wework']]
+                loc_ww = loc_feat[loc_feat['is_wework'] == True]
+                all_loc_name = \
+                all_loc_name.merge(loc_ww, on='atlas_location_uuid', how='inner', suffixes=['', '_right'])[
+                    ['atlas_location_uuid']]
+
+            all_loc_name['key'] = 0
+            pdc['key'] = 0
+
+            testing_pair = pd.merge(pdc, all_loc_name, on='key', how='left',
+                                    suffixes=['_left', '_right']).reset_index(drop=True)
+
+            testing_pair = testing_pair.rename(
+                columns={'atlas_location_uuid_left': 'groundtruth', 'atlas_location_uuid_right': 'atlas_location_uuid'})
+            testing_pair = testing_pair[['duns_number', 'atlas_location_uuid', 'groundtruth']]
+            testing_pair['label'] = (testing_pair['atlas_location_uuid'] == testing_pair['groundtruth'])
+            testing_pair = testing_pair[['duns_number', 'atlas_location_uuid', 'label']]
+
+            valid_loader = make_loader(df_comp_feat=df_comp_feat, df_loc_feat=df_loc_feat, df_pair=testing_pair,
+                                       emb_dict=loc_name_dict, df_ensemble=df_ensemble, name='valid', shuffle=False)
+            print('Predictions for city %d' % ind_city)
+
+            if wework_location_only:
+                pre_name = 'ww_'
+            else:
+                pre_name = ''
+
+            predict(model, criterion, tqdm.tqdm(valid_loader, desc='Validation'),
+                    use_cuda=use_cuda, test_pair=testing_pair[['atlas_location_uuid', 'duns_number']],
+                    pre_name=pre_name, \
+                    save_name=pred_save_name[ind_city], lossType=lossType)
 
 
 #=============================================================================================================================
