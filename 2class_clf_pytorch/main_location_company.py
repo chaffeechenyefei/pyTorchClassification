@@ -413,7 +413,8 @@ def main():
         for ind_city,str_city in enumerate(cityname):
             pdcl = pd.read_csv(pjoin(TR_DATA_ROOT, clfile[ind_city]))[['atlas_location_uuid', 'duns_number']]
             pdc = pdc_all[pdc_all['city']==str_city]
-            print('Total %d company found from salesforce'%len(pdc))
+            tot_comp = len(pdc)
+            print('Total %d company found in %s from salesforce'%(tot_comp,str_city))
             pdc['atlas_location_uuid'] = 'a'
             # in case of multi-mapping
             # pdcl = pdcl.groupby('atlas_location_uuid').first().reset_index()
@@ -426,6 +427,9 @@ def main():
                 all_loc_name = \
                 all_loc_name.merge(loc_ww, on='atlas_location_uuid', how='inner', suffixes=['', '_right'])[
                     ['atlas_location_uuid']]
+
+            tot_loc = len(all_loc_name)
+            print('Total %d locations belonged to ww in %s'%(tot_loc,str_city))
 
             all_loc_name['key'] = 0
             pdc['key'] = 0
@@ -448,10 +452,17 @@ def main():
             else:
                 pre_name = ''
 
+
+
+            if args.query_location:
+                topk = min(300,tot_comp)
+            else:
+                topk = min(3,tot_loc)
+
             predict(model, criterion, tqdm.tqdm(valid_loader, desc='Validation'),
                     use_cuda=use_cuda, test_pair=testing_pair[['atlas_location_uuid', 'duns_number']],
                     pre_name=pre_name, \
-                    save_name=pred_save_name[ind_city], lossType=lossType)
+                    save_name=pred_save_name[ind_city], lossType=lossType,query_loc_flag=args.query_location,topk=topk)
 
 
 #=============================================================================================================================
@@ -462,8 +473,7 @@ def main():
 # #predict
 # #=============================================================================================================================
 def predict(
-        model: nn.Module, criterion, predict_loader, use_cuda, test_pair, save_name:str , pre_name:str = '',lossType='softmax',sampling=True) -> Dict[str, float]:
-    topk = 300
+        model: nn.Module, criterion, predict_loader, use_cuda, test_pair, save_name:str , pre_name:str = '',topk=300,query_loc_flag=True,lossType='softmax',sampling=True) -> Dict[str, float]:
     model.eval()
     all_losses, all_predictions, all_targets = [], [], []
     with torch.no_grad():
@@ -518,7 +528,11 @@ def predict(
         print('sampling...')
         #for each location we return topk companies
         # sample_pd = res_pd.sort_values(by=['atlas_location_uuid','similarity'],ascending=False).groupby('atlas_location_uuid').head(topk).reset_index(drop=True)
-        sample_pd = res_pd.groupby('atlas_location_uuid').apply(lambda x: x.nlargest(topk,['similarity'])).reset_index(drop=True)
+        if query_loc_flag:
+            sample_pd = res_pd.groupby('atlas_location_uuid').apply(lambda x: x.nlargest(topk,['similarity'])).reset_index(drop=True)
+        else:
+            sample_pd = res_pd.groupby('duns_number').apply(
+                lambda x: x.nlargest(topk, ['similarity'])).reset_index(drop=True)
         sample_pd.to_csv('sampled_' + pre_name + save_name )
     print('saving total data...')
 

@@ -230,7 +230,7 @@ def predict_with_reason(
 
 
     all_x_grads = torch.cat(all_x_grads)
-    print('all_predictions.shape: ')
+    print('all_predictions.shape: ',all_x_grads.shape)
 
     all_x_grads = all_x_grads.data.cpu().numpy()
     #get topk index of column
