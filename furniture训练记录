@@ -135,6 +135,7 @@ nohup python3 -u main_location_intelligence_region.py --run_root result/location
 python3 main_location_company.py --model location_recommend_model_v6 --run_root result/location_recommend_model_v6_5city_191113 --lr 0.01 --mode predict_salesforce --ckpt model_loss_best.pt --apps _191113.csv --query_location
 ==OR==
 python3 main_location_company.py --model location_recommend_model_v6 --run_root result/location_recommend_model_v6_5city_191113 --lr 0.01 --mode predict_salesforce --ckpt model_loss_best.pt --apps _191113.csv
+cp *.csv ~/location_recommender_system/
 python3 main_location_company_model_based_reason.py --apps _191113.csv --pre_name sampled_ww_
 python3 get_sub_recommend_reason_after_similarity.py --run_root ~/location_recommender_system/ --ls_card location_scorecard_191113.csv --apps _191113.csv --sampled --ww
 

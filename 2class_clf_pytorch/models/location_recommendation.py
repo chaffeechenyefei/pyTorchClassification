@@ -409,6 +409,16 @@ class RegionModelv5(nn.Module):
             'outputs': outputs
         }
 
+    def predict(self,feat_comp,feat_region,feat_loc):
+        region_feat_comp = self.netDeep(feat_region)
+        feat_deep_and_wide = torch.cat([feat_comp, feat_loc, region_feat_comp], dim=1)
+        outputs = self.netClf(feat_deep_and_wide)
+
+        return {
+            'feat_region_deep':region_feat_comp,
+            'outputs':outputs
+        }
+
 
 class NaiveLR(nn.Module):
     """
