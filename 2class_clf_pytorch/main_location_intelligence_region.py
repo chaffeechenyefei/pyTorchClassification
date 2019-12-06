@@ -280,7 +280,7 @@ def train(args, model: nn.Module, criterion, *, params,
                 loss = lossP + 0.8*lossN
 
                 if args.model in ['location_recommend_region_model_v4','location_recommend_region_model_v5']:
-                    lW = 0.3
+                    lW = 0.1
                     loss2 = l2_loss(model_output_pos['feat_loc_pred'],featLoc) #Neg Pos share the same location
                     loss = (1-lW)*loss + lW*loss2
 

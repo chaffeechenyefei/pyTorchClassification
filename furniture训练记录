@@ -131,6 +131,7 @@ nohup python3 -u main_location_intelligence_region.py --run_root result/location
 nohup python3 -u main_location_intelligence_region.py --run_root result/location_RSRBv2_191114 --model location_recommend_region_model_v2 --lr 0.01 --mode train --trainStep 1000 --batch-size 4 >mlir_2.out 2>mlir_2.err &
 nohup python3 -u main_location_intelligence_region.py --run_root result/location_RSRBv3_191114 --model location_recommend_region_model_v3 --lr 0.01 --mode train --trainStep 1000 --batch-size 4 --n-epochs 160 >mlir_3.out 2>mlir_3.err &
 nohup python3 -u main_location_intelligence_region.py --run_root result/location_RSRBv4_191114 --model location_recommend_region_model_v4 --lr 0.01 --mode train --trainStep 1000 --batch-size 4 --n-epochs 80 >mlir_4.out 2>mlir_4.err &
+python3 -u main_location_intelligence_region.py --run_root result/location_RSRBv5_191114 --model location_recommend_region_model_v5 --lr 0.01 --mode train --trainStep 1000 --batch-size 4 --n-epochs 80
 
 python3 main_location_company.py --model location_recommend_model_v6 --run_root result/location_recommend_model_v6_5city_191113 --lr 0.01 --mode predict_salesforce --ckpt model_loss_best.pt --apps _191113.csv --query_location
 ==OR==
