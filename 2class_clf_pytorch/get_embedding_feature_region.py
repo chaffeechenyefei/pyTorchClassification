@@ -42,7 +42,7 @@ def main():
     arg('--mode', choices=['input_grad'], default='input_grad')
     arg('--run_root', default='result/location_RSRBv4_191114/')
     arg('--path',default='/Users/yefeichen/Database/location_recommender_system/')
-    arg('--model', default='location_recommend_region_model_v4')
+    arg('--model', default='location_recommend_region_model_v5')
     arg('--ckpt', type=str, default='model_loss_best.pt')
     arg('--maxK',type=int,default=50)
     arg('--apps',type=str,default='_191114.csv')
@@ -129,7 +129,7 @@ def main():
 
 
     loc_dat = pd.concat([locName, feat_dat], axis=1)
-    loc_dat.to_csv('location_feat_emb_'+args.model+'.csv')
+    loc_dat.to_csv(pjoin(TR_DATA_ROOT,'location_feat_emb_'+args.model+'.csv'))
 
 
 

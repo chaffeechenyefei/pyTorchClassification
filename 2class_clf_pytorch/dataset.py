@@ -21,6 +21,7 @@ from udf.basic import timer
 iaa_transformer = iaaTransform()
 iaa_transformer.getSeq()
 
+sfx = ['','_right']
 
 # =======================================================================================================================
 # Standard Data load with one image each time and do not consider triplet loss(P/N sample pairs)
@@ -966,6 +967,103 @@ def collate_TrainDatasetLocationRSRB(batch):
         "feat_loc": feat_loc,
     }
 
+class TestDatasetLocationRSRB(Dataset):
+    def __init__(self, df_comp_feat: pd.DataFrame,
+                 df_loc_feat: pd.DataFrame,
+                 df_region_feat:pd.DataFrame,
+                 df_pair: pd.DataFrame,
+                 citynum=5, testStep=500000):
+        super().__init__()
+        self._df_comp_feat = df_comp_feat.fillna(0)
+        self._df_loc_feat = df_loc_feat.fillna(0)
+        self._df_region_feat = df_region_feat.fillna(0)
+        self._df_pair = df_pair.reset_index()
+        self._step = testStep
+        self._citynum = citynum
+        self.cldat = []
+        self.locname = []
+
+        self._debug = False
+        self._not_cols = ['duns_number', 'atlas_location_uuid', 'label', 'city']
+
+    def __len__(self):
+        return math.ceil(len(self._df_pair) / self._step)  # len of pair
+
+    def tbatch(self):
+        return 0
+
+    def __getitem__(self, idx: int):
+        tc = timer(display=self._debug)
+        dataLen = len(self._df_pair)
+        inds = idx * self._step
+        inde = min((idx + 1) * self._step, dataLen) - 1
+
+        datA = self._df_pair.loc[inds:inde, ['duns_number', 'atlas_location_uuid','label']]
+
+        tc.start('Append feature with pairs')
+        list_col = list(self._df_comp_feat.columns)
+        list_col = [col for col in list_col if col not in self._not_cols]
+        featA_comp = datA.merge(self._df_comp_feat, on='duns_number', how='left', suffixes=sfx)[list_col]
+
+        list_col = list(self._df_region_feat.columns)
+        list_col = [col for col in list_col if col not in self._not_cols]
+        featA_region = datA.merge(self._df_region_feat, on='atlas_location_uuid', how='left', suffixes=sfx)[list_col]
+
+
+        list_col = list(self._df_loc_feat.columns)
+        list_col = [col for col in list_col if col not in self._not_cols]
+        featA_loc = datA.merge(self._df_loc_feat, on='atlas_location_uuid', how='left', suffixes=sfx)[
+            list_col]
+        tc.eclapse()
+
+        # all branch need such operation...
+        tc.start('Transfer storage')
+        featA_comp, featA_region, featA_loc = featA_comp.to_numpy(), featA_region.to_numpy(), featA_loc.to_numpy()
+
+        featComp = torch.FloatTensor(featA_comp)  # B,D
+        featRegion = torch.FloatTensor(featA_region)
+        featLoc = torch.FloatTensor(featA_loc)
+
+        N, featdim = featRegion.shape
+
+        assert ( (N == featComp.shape[0]) and (N==featLoc.shape[0]) )
+        tc.eclapse()
+
+        return {
+            "feat_comp": featComp,
+            "feat_region": featRegion,
+            "feat_loc": featLoc,
+        }
+
+
+def collate_TestDatasetLocationRSRB(batch):
+    """
+    special collate_fn function for UDF class TrainDatasetTriplet
+    :param batch: 
+    :return: 
+    """
+    feat_comp = []
+    feat_region = []
+    feat_loc = []
+
+    for b in batch:
+        feat_comp.append(b['feat_comp'])
+        feat_region.append(b['feat_comp_region'])
+        feat_loc.append(b['feat_loc'])
+
+    feat_comp = torch.cat(feat_comp, 0)
+    feat_region = torch.cat(feat_region, 0)
+    feat_loc = torch.cat(feat_loc, 0)
+    # print(feat_comp.shape,feat_loc.shape,labels.shape)
+
+    assert (feat_comp.shape[0] == feat_region.shape[0]  and
+            feat_loc.shape[0] == feat_comp.shape[0])
+
+    return {
+        "feat_comp": feat_comp,
+        "feat_region": feat_region,
+        "feat_loc": feat_loc,
+    }
 
 # =======================================================================================================================
 
